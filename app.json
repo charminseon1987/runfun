@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "RunFun",
+    "slug": "runfun",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": false,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0B0C10"
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0B0C10"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}

@@ -1,0 +1,8 @@
+# DB는 Supabase(PostgreSQL)를 사용합니다. 로컬 Postgres 컨테이너는 두지 않습니다.
+# Redis가 필요할 때만 선택 실행: docker compose up -d redis
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:8081/app.js.bundle?platform=web&dev=true\")",
+      "WebFetch(domain:claude.ai)"
+    ]
+  }
+}

@@ -1,0 +1,142 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,500;1,600&family=Outfit:wght@300;400;500&display=swap');
+
+@import 'tailwindcss';
+
+@theme {
+  --font-heading: 'Cormorant Garamond', Georgia, serif;
+  --font-body: 'Outfit', ui-sans-serif, sans-serif;
+
+  --color-landing-bg: #060912;
+  --color-landing-text: #f1f5f9;
+  --color-landing-muted: #94a3b8;
+}
+
+:root {
+  --landing-bg: #060912;
+  --landing-fg: #eef2ff;
+  --landing-border: rgba(255, 255, 255, 0.14);
+  --landing-radius: 1.25rem;
+  --glass-blur: 24px;
+  --glass-blur-strong: 44px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--landing-bg);
+  color: var(--landing-fg);
+}
+
+/* Base typography per design system */
+.landing-heading {
+  font-family: var(--font-heading), Georgia, serif;
+  font-style: italic;
+  color: var(--color-landing-text);
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+}
+
+.landing-body {
+  font-family: var(--font-body), ui-sans-serif, sans-serif;
+  font-weight: 300;
+  color: var(--color-landing-muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+.liquid-glass {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--landing-radius);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.22);
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease,
+    filter 0.35s ease;
+}
+
+.liquid-glass:hover {
+  transform: scale(1.02);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.22),
+    0 0 40px rgba(139, 92, 246, 0.12);
+}
+
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.liquid-glass-strong {
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--landing-radius);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(var(--glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.35),
+    0 24px 80px rgba(0, 0, 0, 0.45);
+  transition:
+    transform 0.35s ease,
+    box-shadow 0.35s ease,
+    filter 0.35s ease;
+}
+
+.liquid-glass-strong:hover {
+  transform: scale(1.02);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.35),
+    0 0 56px rgba(34, 211, 238, 0.18);
+  filter: brightness(1.05);
+}
+
+.liquid-glass-strong::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(165, 243, 252, 0.15) 40%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
