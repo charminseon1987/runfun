@@ -9,14 +9,14 @@
     "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
-      "backgroundColor": "#0B0C10"
+      "backgroundColor": "#141018"
     },
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#0B0C10"
+        "backgroundColor": "#141018"
       }
     },
     "web": {
