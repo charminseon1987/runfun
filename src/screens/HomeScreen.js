@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Play, Bell, Flame } from 'lucide-react-native';
 import { C, ax, SEASON, greeting } from '../theme/season';
 import FriendCard from '../components/FriendCard';
+import { useAppData } from '../context/AppDataContext';
 
 const UPCOMING = [
   { id: '1', emoji: '🏙️', name: '서울 국제 마라톤', dday: 10, dist: '풀', loc: '광화문' },
@@ -34,6 +35,7 @@ const HOT_COURSES = [
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const { weekStats, streak, weeklyGoalKm } = useAppData();
   const [friendAlerts, setFriendAlerts] = useState(['a1', 'a2']);
   const [cheered, setCheered] = useState({});
 
@@ -47,9 +49,9 @@ export default function HomeScreen({ navigation }) {
     ).start();
   }, [pulseAnim]);
 
-  const weeklyKm = 18.4;
-  const weeklyGoal = 30;
-  const progress = weeklyKm / weeklyGoal;
+  const weeklyKm = weekStats.totalKm;
+  const weeklyGoal = weeklyGoalKm;
+  const progress = weeklyGoal > 0 ? weeklyKm / weeklyGoal : 0;
 
   return (
     <ScrollView
@@ -80,7 +82,7 @@ export default function HomeScreen({ navigation }) {
             <Text style={hs.weekLabel}>이번 주 러닝</Text>
             <View style={hs.streakBadge}>
               <Flame size={12} color={C.accentDeep} />
-              <Text style={hs.streakTxt}> 5일 연속</Text>
+              <Text style={hs.streakTxt}> {streak}일 연속</Text>
             </View>
           </View>
 
@@ -92,14 +94,14 @@ export default function HomeScreen({ navigation }) {
               </Text>
               <Text style={hs.weekKmSub}>/ {weeklyGoal}km 목표</Text>
             </View>
-            <View style={hs.weekMiniStats}>
+              <View style={hs.weekMiniStats}>
               <View style={hs.weekMiniItem}>
-                <Text style={hs.weekMiniVal}>3회</Text>
+                <Text style={hs.weekMiniVal}>{weekStats.count}회</Text>
                 <Text style={hs.weekMiniLbl}>러닝</Text>
               </View>
               <View style={[hs.weekMiniItem, { marginLeft: 20 }]}>
-                <Text style={hs.weekMiniVal}>5'48"</Text>
-                <Text style={hs.weekMiniLbl}>평균 페이스</Text>
+                <Text style={hs.weekMiniVal}>{weekStats.paceStr}</Text>
+                <Text style={hs.weekMiniLbl}>주간 페이스</Text>
               </View>
             </View>
           </View>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,13 +29,10 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Video, ResizeMode } from 'expo-av';
 import { SCREEN_W } from '../constants/layout';
+import { hydrateFeedPosts } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
+import { saveFeedPosts } from '../storage/appStorage';
 import { C, ax } from '../theme/season';
-
-/** 로그인 사용자 (MY 화면 프로필과 동일) */
-const ME = {
-  user: '러너 김민수',
-  avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100',
-};
 
 const MAX_MEDIA_COUNT = 8;
 const MAX_VIDEO_SECONDS = 30;
@@ -110,7 +107,39 @@ const POSTS_SEED = [
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const meProfile = useMemo(
+    () => ({
+      user: user?.name || '러너',
+      avatar:
+        user?.picture ||
+        'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=100',
+    }),
+    [user]
+  );
   const [posts, setPosts] = useState(POSTS_SEED);
+  const [feedHydrated, setFeedHydrated] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    hydrateFeedPosts(POSTS_SEED).then((p) => {
+      if (!cancelled) {
+        setPosts(p);
+        setFeedHydrated(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!feedHydrated) return;
+    const t = setTimeout(() => {
+      void saveFeedPosts(posts);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [posts, feedHydrated]);
   const [saved, setSaved] = useState(new Set());
   const [page, setPage] = useState({});
   const [composeOpen, setComposeOpen] = useState(false);
@@ -255,8 +284,8 @@ export default function FeedScreen() {
 
     const newPost = {
       id: editTargetId || `u-${Date.now()}`,
-      user: ME.user,
-      avatar: ME.avatar,
+      user: meProfile.user,
+      avatar: meProfile.avatar,
       km: kmRaw || '-',
       media: draftMedia,
       content: body,
@@ -697,7 +726,7 @@ export default function FeedScreen() {
         <Pressable style={fs.actionBackdrop} onPress={() => setActionPost(null)} />
         <View style={fs.actionSheet}>
           <Text style={fs.actionTitle}>게시글 옵션</Text>
-          {actionPost?.user === ME.user ? (
+          {actionPost?.user === meProfile.user ? (
             <>
               <TouchableOpacity
                 style={fs.actionBtn}

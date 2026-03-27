@@ -12,9 +12,24 @@ function envTrim(name) {
 
 const googleMapsApiKey = envTrim('GOOGLE_MAPS_API_KEY');
 
+/** Google OAuth (웹/안드로이드/iOS 클라이언트 ID — Google Cloud 콘솔에서 생성) */
+const googleOAuth = {
+  webClientId: envTrim('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID'),
+  iosClientId: envTrim('EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID'),
+  androidClientId: envTrim('EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID'),
+};
+
 module.exports = {
   expo: {
     ...appJson.expo,
+    scheme: 'runfun',
+    extra: {
+      ...(appJson.expo.extra || {}),
+      google: {
+        ...googleOAuth,
+        ...(appJson.expo.extra?.google || {}),
+      },
+    },
     android: {
       ...appJson.expo.android,
       config: {

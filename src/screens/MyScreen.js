@@ -5,17 +5,15 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight } from 'lucide-react-native';
 import { C } from '../theme/season';
 import { useAgent } from '../context/AgentContext';
-
-const RECENT = [
-  { id: '1', emoji: '🌙', name: '한강 야경코스', km: 7.2, pace: "5'38\"", dur: '40:35', kcal: 412, ago: '오늘' },
-  { id: '2', emoji: '⛰️', name: '북한산 둘레길', km: 5.8, pace: "6'12\"", dur: '35:58', kcal: 334, ago: '어제' },
-  { id: '3', emoji: '🌿', name: '올림픽공원', km: 5.4, pace: "5'52\"", dur: '31:42', kcal: 308, ago: '3일 전' },
-];
+import { useAppData } from '../context/AppDataContext';
+import { useAuth } from '../context/AuthContext';
+import { formatAgo, formatDurationSec } from '../utils/stats';
 
 const STAMPS = [
   { id: '1', emoji: '🌉', name: '한강 야경', rarity: '골드', rarC: C.gold },
@@ -28,6 +26,8 @@ const STAMPS = [
 export default function MyScreen() {
   const insets = useSafeAreaInsets();
   const { openAgent } = useAgent();
+  const { runs, streak, yearStats, totalKmAll, totalRuns } = useAppData();
+  const { user, signInWithGoogle, signOut, googleConfigured } = useAuth();
 
   return (
     <ScrollView
@@ -38,21 +38,34 @@ export default function MyScreen() {
       <View style={[ps.heroBox, { paddingTop: insets.top + 16 }]}>
         <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
           <View style={ps.avatarWrap}>
-            <Text style={{ fontSize: 36 }}>🏃</Text>
+            {user?.picture ? (
+              <Image source={{ uri: user.picture }} style={ps.avatarImg} />
+            ) : (
+              <Text style={{ fontSize: 36 }}>🏃</Text>
+            )}
             <View style={ps.editDot}>
               <Text style={{ fontSize: 10 }}>✏️</Text>
             </View>
           </View>
           <View style={{ flex: 1, marginLeft: 14 }}>
-            <Text style={ps.heroName}>러너 김민수</Text>
+            <Text style={ps.heroName}>{user?.name || '게스트 러너'}</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 }}>
               <View style={ps.gradeBadge}>
                 <Text style={{ fontSize: 11 }}>👑</Text>
                 <Text style={ps.gradeTxt}> 골드 러너</Text>
               </View>
-              <Text style={{ color: C.textSub, fontSize: 12 }}>서울 · 30대</Text>
+              <Text style={{ color: C.textSub, fontSize: 12 }} numberOfLines={1}>
+                {user?.email || (googleConfigured ? 'Google 미연동' : 'OAuth 설정 필요')}
+              </Text>
             </View>
-            <Text style={ps.streakTxt}>🔥 5일 연속 러닝 중</Text>
+            <Text style={ps.streakTxt}>🔥 {streak}일 연속 러닝 중</Text>
+            <TouchableOpacity
+              style={ps.googleBtn}
+              onPress={user ? signOut : signInWithGoogle}
+              activeOpacity={0.85}
+            >
+              <Text style={ps.googleBtnTxt}>{user ? 'Google 로그아웃' : 'Google로 로그인'}</Text>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity style={ps.settingsBtn}>
             <Text style={{ color: C.textSub, fontSize: 20 }}>⚙️</Text>
@@ -61,10 +74,10 @@ export default function MyScreen() {
 
         <View style={ps.statRow}>
           {[
-            ['247', '러닝'],
-            ['1,284', 'km'],
-            ['38', '팔로워'],
-            ['12', '스탬프'],
+            [String(totalRuns), '러닝'],
+            [totalKmAll < 1000 ? totalKmAll.toFixed(1) : totalKmAll.toFixed(0), 'km'],
+            [user ? '✓' : '—', 'Google'],
+            [String(Math.min(Math.max(totalRuns, 0), 12)), '스탬프'],
           ].map(([v, l], i) => (
             <React.Fragment key={i}>
               {i > 0 && <View style={ps.statDiv} />}
@@ -79,12 +92,12 @@ export default function MyScreen() {
 
       <View style={ps.section}>
         <View style={ps.yearCard}>
-          <Text style={ps.yearLabel}>2026년 러닝 기록</Text>
+          <Text style={ps.yearLabel}>{new Date().getFullYear()}년 러닝 기록</Text>
           <View style={{ flexDirection: 'row', marginTop: 12 }}>
             {[
-              ['1,284', 'km', '총 거리', C.accent],
-              ['247', '회', '총 러닝', C.purple],
-              ["5'52\"", '/km', '평균 페이스', C.orange],
+              [yearStats.totalKm.toFixed(1), 'km', '총 거리', C.accent],
+              [String(yearStats.count), '회', '총 러닝', C.purple],
+              [yearStats.paceStr, '/km', '평균 페이스', C.orange],
             ].map(([v, u, l, color], i) => (
               <View key={i} style={{ flex: 1, alignItems: 'center' }}>
                 <Text style={[ps.yearVal, { color }]}>
@@ -105,26 +118,34 @@ export default function MyScreen() {
             <Text style={ps.sectionMore}>전체보기</Text>
           </TouchableOpacity>
         </View>
-        {RECENT.map((r) => (
-          <View key={r.id} style={ps.runCard}>
-            <View style={ps.runEmoji}>
-              <Text style={{ fontSize: 22 }}>{r.emoji}</Text>
-            </View>
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Text style={ps.runName}>{r.name}</Text>
-                <Text style={{ color: C.textSub, fontSize: 11 }}>{r.ago}</Text>
+        {runs.length === 0 ? (
+          <Text style={{ color: C.textSub, paddingHorizontal: 4, paddingBottom: 8 }}>
+            아직 저장된 러닝이 없어요. 러닝 탭에서 시작해 보세요!
+          </Text>
+        ) : (
+          runs.slice(0, 5).map((r) => (
+            <View key={r.id} style={ps.runCard}>
+              <View style={ps.runEmoji}>
+                <Text style={{ fontSize: 22 }}>{r.emoji || '🏃'}</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 4 }}>
-                <Text style={{ color: C.accent, fontSize: 12, fontWeight: '700' }}>{r.km}km</Text>
-                <Text style={{ color: C.text, fontSize: 12, fontWeight: '600' }}>{r.pace}</Text>
-                <Text style={{ color: C.textSub, fontSize: 12 }}>{r.dur}</Text>
-                <Text style={{ color: C.orange, fontSize: 12, fontWeight: '600' }}>{r.kcal}kcal</Text>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={ps.runName}>{r.label || '러닝'}</Text>
+                  <Text style={{ color: C.textSub, fontSize: 11 }}>{formatAgo(r.endedAt)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                  <Text style={{ color: C.accent, fontSize: 12, fontWeight: '700' }}>
+                    {(Number(r.distanceKm) || 0).toFixed(2)}km
+                  </Text>
+                  <Text style={{ color: C.text, fontSize: 12, fontWeight: '600' }}>{r.paceStr}</Text>
+                  <Text style={{ color: C.textSub, fontSize: 12 }}>{formatDurationSec(r.durationSec)}</Text>
+                  <Text style={{ color: C.orange, fontSize: 12, fontWeight: '600' }}>{r.kcal}kcal</Text>
+                </View>
               </View>
+              <ChevronRight size={16} color={C.textSub} />
             </View>
-            <ChevronRight size={16} color={C.textSub} />
-          </View>
-        ))}
+          ))
+        )}
       </View>
 
       <View style={ps.section}>
@@ -208,7 +229,9 @@ const ps = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: C.accent,
+    overflow: 'hidden',
   },
+  avatarImg: { width: 68, height: 68, borderRadius: 34 },
   editDot: {
     position: 'absolute',
     bottom: 2,
@@ -231,6 +254,17 @@ const ps = StyleSheet.create({
   },
   gradeTxt: { color: C.gold, fontSize: 11, fontWeight: '700' },
   streakTxt: { color: C.accent, fontSize: 12, fontWeight: '600', marginTop: 5 },
+  googleBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: C.surfaceL2,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+  },
+  googleBtnTxt: { color: C.text, fontSize: 13, fontWeight: '700' },
   settingsBtn: { padding: 4 },
   statRow: {
     flexDirection: 'row',

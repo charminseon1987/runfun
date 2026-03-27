@@ -15,6 +15,9 @@ import {
 import * as Location from 'expo-location';
 import { Play, Clock } from 'lucide-react-native';
 import RunMapView from '../components/RunMapView';
+import { useAppData } from '../context/AppDataContext';
+import { downsampleCoords, pathDistanceKm } from '../utils/geo';
+import { formatPace } from '../utils/stats';
 import { C, ax } from '../theme/season';
 
 const DEFAULT_REGION = {
@@ -42,6 +45,11 @@ export default function RunScreen() {
   const kmRef = useRef(0);
   const mapRef = useRef(null);
   const watchRef = useRef(null);
+  const runStartedAtRef = useRef(null);
+  const elapsedRef = useRef(0);
+  useEffect(() => {
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
 
   useEffect(() => {
     if (phase === 'running') {
@@ -49,8 +57,6 @@ export default function RunScreen() {
       intervalRef.current = setInterval(() => {
         const delta = Math.floor((Date.now() - startTimeRef.current) / 1000);
         setElapsed(elapsedAtPauseRef.current + delta);
-        kmRef.current = +(kmRef.current + 0.01).toFixed(2);
-        setKm(kmRef.current);
       }, 1000);
     } else {
       clearInterval(intervalRef.current);
@@ -145,7 +151,11 @@ export default function RunScreen() {
             ) {
               return prev;
             }
-            return [...prev, pt];
+            const next = [...prev, pt];
+            const kmNow = pathDistanceKm(next);
+            kmRef.current = kmNow;
+            setKm(kmNow);
+            return next;
           });
           mapRef.current?.animateToRegion(
             {
@@ -173,13 +183,45 @@ export default function RunScreen() {
   const fmt = (s) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
-  const paceStr = useMemo(() => {
-    if (km < 0.05 || elapsed < 1) return "--'--\"";
-    const sPerKm = elapsed / km;
-    return `${Math.floor(sPerKm / 60)}'${String(Math.round(sPerKm % 60)).padStart(2, '"')}`;
-  }, [elapsed, km]);
+  const paceStr = useMemo(() => formatPace(elapsed, km), [elapsed, km]);
 
   const kcal = Math.round(km * 62);
+
+  const buildRunRecord = () => {
+    const dist = kmRef.current;
+    const dur = elapsedRef.current;
+    const endedAt = Date.now();
+    const startedAt = runStartedAtRef.current || endedAt - dur * 1000;
+    return {
+      startedAt,
+      endedAt,
+      distanceKm: Math.round(dist * 100) / 100,
+      durationSec: dur,
+      paceStr: formatPace(dur, dist),
+      kcal: Math.round(dist * 62),
+      laps,
+      routeSample: downsampleCoords(routeCoords, 180),
+      emoji: '🏃',
+      label: 'GPS 러닝',
+    };
+  };
+
+  const saveRunAndReset = async () => {
+    try {
+      await addRun(buildRunRecord());
+    } catch {
+      Alert.alert('저장 실패', '러닝 기록을 저장하지 못했어요. 저장 공간을 확인해 주세요.');
+    }
+    setPhase('idle');
+    setElapsed(0);
+    setKm(0);
+    setLaps([]);
+    kmRef.current = 0;
+    elapsedAtPauseRef.current = 0;
+    runStartedAtRef.current = null;
+    setShowFinishModal(false);
+    setRouteCoords([]);
+  };
 
   const resetRun = () => {
     setPhase('idle');
@@ -188,18 +230,19 @@ export default function RunScreen() {
     setLaps([]);
     kmRef.current = 0;
     elapsedAtPauseRef.current = 0;
+    runStartedAtRef.current = null;
     setShowFinishModal(false);
     setRouteCoords([]);
   };
 
   const onFinishWithShare = async () => {
     try {
-      const msg = `오늘 러닝 기록\n- 거리: ${km.toFixed(2)}km\n- 시간: ${fmt(elapsed)}\n- 페이스: ${paceStr}\n- 칼로리: ${kcal}kcal`;
+      const msg = `오늘 러닝 기록\n- 거리: ${kmRef.current.toFixed(2)}km\n- 시간: ${fmt(elapsedRef.current)}\n- 페이스: ${formatPace(elapsedRef.current, kmRef.current)}\n- 칼로리: ${Math.round(kmRef.current * 62)}kcal`;
       await Share.share({ message: msg });
     } catch (e) {
       // 공유가 취소되거나 실패해도 종료는 진행
     } finally {
-      resetRun();
+      await saveRunAndReset();
     }
   };
 
@@ -245,7 +288,19 @@ export default function RunScreen() {
         )}
 
         {phase === 'idle' && (
-          <TouchableOpacity style={rs.cta} onPress={() => setPhase('running')}>
+          <TouchableOpacity
+            style={rs.cta}
+            onPress={() => {
+              elapsedAtPauseRef.current = 0;
+              kmRef.current = 0;
+              setKm(0);
+              setElapsed(0);
+              setRouteCoords([]);
+              setLaps([]);
+              runStartedAtRef.current = Date.now();
+              setPhase('running');
+            }}
+          >
             <Play size={18} color={C.onAccent} fill={C.onAccent} />
             <Text style={rs.ctaTxt}>러닝 시작</Text>
           </TouchableOpacity>
@@ -255,7 +310,7 @@ export default function RunScreen() {
             <TouchableOpacity
               style={rs.ctaSec}
               onPress={() =>
-                setLaps((p) => [...p, { lapKm: km.toFixed(2), lapTime: fmt(elapsed) }])
+                setLaps((p) => [...p, { lapKm: kmRef.current.toFixed(2), lapTime: fmt(elapsed) }])
               }
             >
               <Text style={rs.ctaSecTxt}>랩</Text>
@@ -302,7 +357,7 @@ export default function RunScreen() {
             <TouchableOpacity style={rs.modalPrimaryBtn} onPress={onFinishWithShare}>
               <Text style={rs.modalPrimaryTxt}>공유하고 종료</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={rs.modalSecondaryBtn} onPress={resetRun}>
+            <TouchableOpacity style={rs.modalSecondaryBtn} onPress={() => void saveRunAndReset()}>
               <Text style={rs.modalSecondaryTxt}>공유 안 하고 종료</Text>
             </TouchableOpacity>
             <TouchableOpacity style={rs.modalGhostBtn} onPress={() => setShowFinishModal(false)}>
