@@ -48,10 +48,10 @@ const STAMP_POSITIONS = [
   { id: 'tr', label: '우상단' },
 ];
 const STAMP_THEMES = [
-  { id: 'dark', label: '다크', bg: 'rgba(20,16,24,0.78)', border: ax(0.35), title: C.accent, text: C.text },
+  { id: 'dark', label: '다크', bg: 'rgba(28,22,25,0.82)', border: ax(0.35), title: C.accent, text: '#F8F5F6' },
   { id: 'light', label: '라이트', bg: 'rgba(255,245,250,0.85)', border: 'rgba(255,255,255,0.9)', title: '#C54D75', text: '#2D1B24' },
-  { id: 'mint', label: '민트', bg: 'rgba(125,211,168,0.22)', border: 'rgba(125,211,168,0.45)', title: '#A4FFD5', text: C.text },
-  { id: 'violet', label: '바이올렛', bg: 'rgba(201,184,232,0.28)', border: 'rgba(201,184,232,0.55)', title: '#E8DAFF', text: C.text },
+  { id: 'mint', label: '민트', bg: 'rgba(125,211,168,0.22)', border: 'rgba(125,211,168,0.45)', title: '#1B6B52', text: C.text },
+  { id: 'violet', label: '바이올렛', bg: 'rgba(201,184,232,0.28)', border: 'rgba(201,184,232,0.55)', title: '#5C4580', text: C.text },
 ];
 
 function normalizeHex(input, fallback) {
@@ -763,12 +763,12 @@ const fs = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '700', color: C.text },
   userSub: { fontSize: 11, color: C.textSub, marginTop: 1 },
   dotRow: { flexDirection: 'row', justifyContent: 'center', marginTop: -14, marginBottom: 6, gap: 5 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.25)' },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.2)' },
   dotOn: { width: 8, backgroundColor: C.accent },
   mediaSlide: { width: SCREEN_W, height: SCREEN_W * 0.78 },
   recordStamp: {
     position: 'absolute',
-    backgroundColor: 'rgba(20,16,24,0.78)',
+    backgroundColor: 'rgba(28,22,25,0.82)',
     borderWidth: 1,
     borderColor: ax(0.35),
     borderRadius: 10,

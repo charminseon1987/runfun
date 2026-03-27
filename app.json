@@ -12,13 +12,30 @@
       "backgroundColor": "#141018"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "러닝 경로를 지도에 표시하고 기록하기 위해 위치 접근이 필요합니다.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "러닝 중 이동 경로를 표시하기 위해 위치 접근이 필요합니다."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#141018"
-      }
+      },
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION"
+      ]
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "러닝 중 지도와 경로 표시를 위해 위치 권한이 필요합니다.",
+          "locationWhenInUsePermission": "현재 위치를 지도에 표시하기 위해 위치 권한이 필요합니다."
+        }
+      ]
+    ],
     "web": {
       "bundler": "metro"
     }

@@ -9,9 +9,22 @@ import {
   Modal,
   Pressable,
   Share,
+  Platform,
+  Alert,
 } from 'react-native';
-import { Play, Clock, MapPin } from 'lucide-react-native';
+import * as Location from 'expo-location';
+import { Play, Clock } from 'lucide-react-native';
+import RunMapView from '../components/RunMapView';
 import { C, ax } from '../theme/season';
+
+const DEFAULT_REGION = {
+  latitude: 37.5665,
+  longitude: 126.978,
+  latitudeDelta: 0.04,
+  longitudeDelta: 0.04,
+};
+
+const IS_WEB = Platform.OS === 'web';
 
 export default function RunScreen() {
   const [phase, setPhase] = useState('idle');
@@ -19,12 +32,16 @@ export default function RunScreen() {
   const [km, setKm] = useState(0);
   const [laps, setLaps] = useState([]);
   const [showFinishModal, setShowFinishModal] = useState(false);
+  const [mapRegion, setMapRegion] = useState(DEFAULT_REGION);
+  const [routeCoords, setRouteCoords] = useState([]);
 
   const intervalRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const startTimeRef = useRef(null);
   const elapsedAtPauseRef = useRef(0);
   const kmRef = useRef(0);
+  const mapRef = useRef(null);
+  const watchRef = useRef(null);
 
   useEffect(() => {
     if (phase === 'running') {
@@ -56,6 +73,103 @@ export default function RunScreen() {
     }
   }, [phase, pulseAnim]);
 
+  /** 앱 진입 시 위치 권한·현재 위치로 지도 초기화 (웹은 플레이스홀더만) */
+  useEffect(() => {
+    if (IS_WEB) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (!cancelled) {
+            Alert.alert(
+              '위치 권한',
+              '지도에 현재 위치를 표시하려면 설정에서 위치 권한을 허용해 주세요. (미허용 시 서울 시내가 기본으로 보여요.)'
+            );
+          }
+          return;
+        }
+        const loc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (cancelled) return;
+        const next = {
+          latitude: loc.coords.latitude,
+          longitude: loc.coords.longitude,
+          latitudeDelta: 0.012,
+          longitudeDelta: 0.012,
+        };
+        setMapRegion(next);
+        requestAnimationFrame(() => {
+          mapRef.current?.animateToRegion(next, 500);
+        });
+      } catch {
+        if (!cancelled) {
+          Alert.alert('위치 오류', '현재 위치를 가져오지 못했어요. 네트워크·GPS를 확인해 주세요.');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** 러닝 중 이동 경로 수집·지도 따라가기 */
+  useEffect(() => {
+    if (IS_WEB || phase !== 'running') {
+      watchRef.current?.remove();
+      watchRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (cancelled || status !== 'granted') return;
+      const subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 4,
+        },
+        (loc) => {
+          const pt = {
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          };
+          setRouteCoords((prev) => {
+            const last = prev[prev.length - 1];
+            if (
+              last &&
+              Math.abs(last.latitude - pt.latitude) < 0.00001 &&
+              Math.abs(last.longitude - pt.longitude) < 0.00001
+            ) {
+              return prev;
+            }
+            return [...prev, pt];
+          });
+          mapRef.current?.animateToRegion(
+            {
+              ...pt,
+              latitudeDelta: 0.006,
+              longitudeDelta: 0.006,
+            },
+            400
+          );
+        }
+      );
+      if (cancelled) {
+        subscription.remove();
+        return;
+      }
+      watchRef.current = subscription;
+    })();
+    return () => {
+      cancelled = true;
+      watchRef.current?.remove();
+      watchRef.current = null;
+    };
+  }, [phase]);
+
   const fmt = (s) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 
@@ -75,6 +189,7 @@ export default function RunScreen() {
     kmRef.current = 0;
     elapsedAtPauseRef.current = 0;
     setShowFinishModal(false);
+    setRouteCoords([]);
   };
 
   const onFinishWithShare = async () => {
@@ -90,10 +205,7 @@ export default function RunScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <View style={rs.mapFull}>
-        <MapPin size={32} color={ax(0.3)} />
-        <Text style={rs.mapHint}>GPS 지도</Text>
-      </View>
+      <RunMapView ref={mapRef} mapRegion={mapRegion} routeCoords={routeCoords} />
 
       <View style={rs.topChip}>
         <Clock size={13} color={C.accent} />
@@ -159,7 +271,7 @@ export default function RunScreen() {
               <Text style={rs.ctaTxt}>계속하기</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[rs.ctaSec, { backgroundColor: '#3D1515', borderColor: C.danger }]}
+              style={[rs.ctaSec, { backgroundColor: 'rgba(224,84,84,0.12)', borderColor: C.danger }]}
               onPress={() => setShowFinishModal(true)}
             >
               <Text style={[rs.ctaSecTxt, { color: C.danger }]}>종료</Text>
@@ -204,14 +316,6 @@ export default function RunScreen() {
 }
 
 const rs = StyleSheet.create({
-  mapFull: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: C.mapBg,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mapHint: { color: ax(0.35), fontSize: 18, fontWeight: '700' },
   topChip: {
     position: 'absolute',
     top: 56,
@@ -219,7 +323,7 @@ const rs = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(20,16,24,0.78)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -246,12 +350,12 @@ const rs = StyleSheet.create({
     paddingBottom: 32,
     paddingHorizontal: 16,
     paddingTop: 20,
-    backgroundColor: 'rgba(20,16,24,0.94)',
+    backgroundColor: 'rgba(255,255,255,0.97)',
   },
   statsRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   statBox: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: 'rgba(0,0,0,0.04)',
     borderRadius: 14,
     paddingVertical: 12,
     alignItems: 'center',

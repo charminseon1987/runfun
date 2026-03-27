@@ -16,7 +16,7 @@ export default function App() {
     <AgentProvider>
       <SafeAreaProvider>
         <NavigationContainer>
-          <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+          <StatusBar barStyle="dark-content" backgroundColor={C.bg} />
           <AppNavigator />
         </NavigationContainer>
         <AgentFab />
