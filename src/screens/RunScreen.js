@@ -13,12 +13,15 @@ import {
   Alert,
 } from 'react-native';
 import * as Location from 'expo-location';
+import Constants from 'expo-constants';
 import { Play, Clock } from 'lucide-react-native';
 import RunMapView from '../components/RunMapView';
 import { useAppData } from '../context/AppDataContext';
+import { useAgent } from '../context/AgentContext';
 import { downsampleCoords, pathDistanceKm } from '../utils/geo';
 import { formatPace } from '../utils/stats';
 import { C, ax } from '../theme/season';
+import { api } from '../api/client';
 
 const DEFAULT_REGION = {
   latitude: 37.5665,
@@ -30,6 +33,15 @@ const DEFAULT_REGION = {
 const IS_WEB = Platform.OS === 'web';
 
 export default function RunScreen() {
+  useEffect(() => {
+    if (IS_WEB) return;
+    if (Platform.OS === 'android' && Constants.appOwnership === 'expo') {
+      console.warn(
+        '[RunFun] Expo Go(Android)에는 프로젝트 .env의 GOOGLE_MAPS_API_KEY가 넣어지지 않습니다. 지도가 비면: (1) `npx expo run:android`로 개발 빌드 실행 (2) 또는 Google Cloud에서 키 제한을 일시 해제·Expo Go용 패키지(host.exp.exponent) 허용'
+      );
+    }
+  }, []);
+
   const [phase, setPhase] = useState('idle');
   const [elapsed, setElapsed] = useState(0);
   const [km, setKm] = useState(0);
@@ -46,7 +58,11 @@ export default function RunScreen() {
   const mapRef = useRef(null);
   const watchRef = useRef(null);
   const runStartedAtRef = useRef(null);
+  const sessionIdRef = useRef(null); // 백엔드 RunningSession ID
   const elapsedRef = useRef(0);
+
+  const { addRun } = useAppData();
+  const { updateLocation } = useAgent();
   useEffect(() => {
     elapsedRef.current = elapsed;
   }, [elapsed]);
@@ -142,6 +158,8 @@ export default function RunScreen() {
             latitude: loc.coords.latitude,
             longitude: loc.coords.longitude,
           };
+          // AI 코치가 위치 기반 추천에 사용
+          updateLocation(loc.coords.latitude, loc.coords.longitude);
           setRouteCoords((prev) => {
             const last = prev[prev.length - 1];
             if (
@@ -192,17 +210,20 @@ export default function RunScreen() {
     const dur = elapsedRef.current;
     const endedAt = Date.now();
     const startedAt = runStartedAtRef.current || endedAt - dur * 1000;
+    const paces = dur > 0 && dist > 0 ? dur / 60 / dist : null;
     return {
       startedAt,
       endedAt,
       distanceKm: Math.round(dist * 100) / 100,
       durationSec: dur,
       paceStr: formatPace(dur, dist),
+      paceNum: paces ? Math.round(paces * 100) / 100 : null,
       kcal: Math.round(dist * 62),
       laps,
       routeSample: downsampleCoords(routeCoords, 180),
       emoji: '🏃',
       label: 'GPS 러닝',
+      _sessionId: sessionIdRef.current, // 백엔드 동기화용 (저장 후 제거됨)
     };
   };
 
@@ -219,6 +240,7 @@ export default function RunScreen() {
     kmRef.current = 0;
     elapsedAtPauseRef.current = 0;
     runStartedAtRef.current = null;
+    sessionIdRef.current = null;
     setShowFinishModal(false);
     setRouteCoords([]);
   };
@@ -248,7 +270,9 @@ export default function RunScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
-      <RunMapView ref={mapRef} mapRegion={mapRegion} routeCoords={routeCoords} />
+      <View style={StyleSheet.absoluteFillObject} collapsable={false}>
+        <RunMapView ref={mapRef} mapRegion={mapRegion} routeCoords={routeCoords} />
+      </View>
 
       <View style={rs.topChip}>
         <Clock size={13} color={C.accent} />
@@ -290,15 +314,25 @@ export default function RunScreen() {
         {phase === 'idle' && (
           <TouchableOpacity
             style={rs.cta}
-            onPress={() => {
+            onPress={async () => {
               elapsedAtPauseRef.current = 0;
               kmRef.current = 0;
               setKm(0);
               setElapsed(0);
               setRouteCoords([]);
               setLaps([]);
-              runStartedAtRef.current = Date.now();
+              const startedAt = Date.now();
+              runStartedAtRef.current = startedAt;
               setPhase('running');
+              // 백엔드 세션 시작 (실패해도 앱 동작에 영향 없음)
+              try {
+                const res = await api.post('/running/start', {
+                  started_at: new Date(startedAt).toISOString(),
+                });
+                sessionIdRef.current = res.id;
+              } catch {
+                sessionIdRef.current = null;
+              }
             }}
           >
             <Play size={18} color={C.onAccent} fill={C.onAccent} />

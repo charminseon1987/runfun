@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import agent, auth, community, courses, friends, marathons, media, running, stamps, websocket
+from app.routers import agent, auth, community, courses, friends, link_preview, marathons, media, running, stamps, websocket
 from app.seed import seed_if_empty
 from app.services.firebase_service import init_firebase
 
@@ -40,6 +40,7 @@ def create_app() -> FastAPI:
     app.include_router(running.router, prefix="/v1")
     app.include_router(stamps.router, prefix="/v1")
     app.include_router(marathons.router, prefix="/v1")
+    app.include_router(link_preview.router, prefix="/v1")
     app.include_router(courses.router, prefix="/v1")
     app.include_router(friends.router, prefix="/v1")
     app.include_router(community.router, prefix="/v1")

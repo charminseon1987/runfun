@@ -12,6 +12,7 @@
       "backgroundColor": "#141018"
     },
     "ios": {
+      "bundleIdentifier": "com.runmate.runfun",
       "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "러닝 경로를 지도에 표시하고 기록하기 위해 위치 접근이 필요합니다.",
@@ -19,6 +20,7 @@
       }
     },
     "android": {
+      "package": "com.runmate.runfun",
       "adaptiveIcon": {
         "backgroundColor": "#141018"
       },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { useAgent } from '../context/AgentContext';
 import { useAppData } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { formatAgo, formatDurationSec } from '../utils/stats';
+import { api } from '../api/client';
 
 const STAMPS = [
   { id: '1', emoji: '🌉', name: '한강 야경', rarity: '골드', rarC: C.gold },
@@ -28,6 +29,25 @@ export default function MyScreen() {
   const { openAgent } = useAgent();
   const { runs, streak, yearStats, totalKmAll, totalRuns } = useAppData();
   const { user, signInWithGoogle, signOut, googleConfigured } = useAuth();
+  const [stamps, setStamps] = useState(STAMPS);
+
+  useEffect(() => {
+    api.get('/stamps/my')
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const rarityColor = { bronze: '#CD7F32', silver: '#A0A0A0', gold: C.gold, epic: C.purple, special: C.orange };
+          const rarityLabel = { bronze: '브론즈', silver: '실버', gold: '골드', epic: '에픽', special: '스페셜' };
+          setStamps(data.map((s) => ({
+            id: s.stamp_id || s.id,
+            emoji: s.stamp?.icon || '🎖️',
+            name: s.stamp?.name || s.stamp_id,
+            rarity: rarityLabel[s.stamp?.rarity] || s.stamp?.rarity || '브론즈',
+            rarC: rarityColor[s.stamp?.rarity] || '#CD7F32',
+          })));
+        }
+      })
+      .catch(() => {}); // 로그인 안 된 경우 등 — 시드 데이터 유지
+  }, [user]);
 
   return (
     <ScrollView
@@ -161,7 +181,7 @@ export default function MyScreen() {
           style={{ marginHorizontal: -16 }}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
         >
-          {STAMPS.map((s) => (
+          {stamps.map((s) => (
             <View key={s.id} style={[ps.stampChip, { borderColor: s.rarC + '66' }]}>
               <Text style={{ fontSize: 24 }}>{s.emoji}</Text>
               <Text style={ps.stampName}>{s.name}</Text>

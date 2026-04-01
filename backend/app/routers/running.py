@@ -1,9 +1,9 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -82,6 +82,37 @@ async def end_run(
 
     await db.refresh(session)
     return session
+
+
+@router.get("/stats/weekly")
+async def weekly_stats(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """현재 주(월~일) 러닝 통계를 반환합니다."""
+    now = datetime.now(timezone.utc)
+    # 이번 주 월요일 00:00 UTC
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    result = await db.execute(
+        select(RunningSession).where(
+            RunningSession.user_id == user.id,
+            RunningSession.started_at >= week_start,
+            RunningSession.ended_at.is_not(None),
+        )
+    )
+    sessions = list(result.scalars().all())
+    total_km = sum(float(s.distance_km) for s in sessions if s.distance_km)
+    run_count = len(sessions)
+    paces = [float(s.avg_pace) for s in sessions if s.avg_pace]
+    avg_pace = sum(paces) / len(paces) if paces else None
+    return {
+        "total_km": round(total_km, 2),
+        "run_count": run_count,
+        "avg_pace": round(avg_pace, 2) if avg_pace else None,
+        "week_start": week_start.isoformat(),
+    }
 
 
 @router.get("/history", response_model=list[RunningSessionOut])

@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:just_audio/just_audio.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/services/api_service.dart';
@@ -21,18 +22,42 @@ class RunningActiveScreen extends ConsumerStatefulWidget {
 
 class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
   StreamSubscription<Position>? _sub;
+  late final AudioPlayer _player;
   final List<LatLng> _route = [];
   String? _sessionId;
   double _distanceKm = 0;
   DateTime? _startedAt;
   bool _running = false;
+  bool _musicEnabled = true;
+  bool _isMusicLoading = false;
+  String _mood = 'Upbeat';
+  int _targetBpm = 145;
+  DateTime? _lastMoodSyncAt;
   GoogleMapController? _mapController;
 
   static const _fallbackTarget = LatLng(37.53, 127.07);
+  static const Map<String, String> _moodTrackMap = {
+    'Lo-fi': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+    'Upbeat': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',
+    'EDM': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',
+    'Techno': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',
+    'K-pop': 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _player = AudioPlayer();
+    _player.playerStateStream.listen((state) {
+      if (!mounted) return;
+      setState(() => _isMusicLoading = state.processingState == ProcessingState.loading);
+    });
+  }
 
   @override
   void dispose() {
     _sub?.cancel();
+    _player.dispose();
     super.dispose();
   }
 
@@ -76,6 +101,9 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
         distanceFilter: 5,
       ),
     ).listen(_onPos);
+    if (_musicEnabled) {
+      _syncMusicByPace(force: true);
+    }
   }
 
   void _followCamera(LatLng target) {
@@ -103,6 +131,7 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
     });
     if (_running) {
       _followCamera(next);
+      _syncMusicByPace();
     }
     final sid = _sessionId;
     if (sid != null) {
@@ -114,6 +143,95 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
                   .toList(),
             },
           );
+    }
+  }
+
+  int _currentPaceSecondsPerKm() {
+    if (_startedAt == null || _distanceKm < 0.05) return 0;
+    final sec = DateTime.now().difference(_startedAt!).inSeconds;
+    final secPerKm = (sec / _distanceKm).round();
+    return secPerKm <= 0 ? 0 : secPerKm;
+  }
+
+  int _paceToBpm(int secPerKm) {
+    if (secPerKm <= 0) return 145;
+    if (secPerKm <= 240) return 178; // <= 4:00
+    if (secPerKm <= 300) return 168; // <= 5:00
+    if (secPerKm <= 360) return 156; // <= 6:00
+    if (secPerKm <= 420) return 146; // <= 7:00
+    return 136;
+  }
+
+  String _paceToMood(int secPerKm) {
+    if (secPerKm <= 0) return _mood;
+    if (secPerKm <= 260) return 'Techno';
+    if (secPerKm <= 320) return 'EDM';
+    if (secPerKm <= 390) return 'Upbeat';
+    return 'Lo-fi';
+  }
+
+  Future<void> _playMoodTrack(String mood) async {
+    final url = _moodTrackMap[mood];
+    if (url == null) return;
+    setState(() => _isMusicLoading = true);
+    try {
+      await _player.setUrl(url);
+      await _player.setLoopMode(LoopMode.one);
+      await _player.play();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('음악 재생에 실패했습니다. 네트워크를 확인하세요.')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isMusicLoading = false);
+      }
+    }
+  }
+
+  Future<void> _syncMusicByPace({bool force = false}) async {
+    if (!_musicEnabled || !_running) return;
+    final now = DateTime.now();
+    if (!force && _lastMoodSyncAt != null && now.difference(_lastMoodSyncAt!).inSeconds < 20) {
+      return;
+    }
+    final secPerKm = _currentPaceSecondsPerKm();
+    final nextBpm = _paceToBpm(secPerKm);
+    final nextMood = _paceToMood(secPerKm);
+    final shouldSwitch = force || (nextMood != _mood) || ((nextBpm - _targetBpm).abs() >= 10);
+    _lastMoodSyncAt = now;
+    if (!shouldSwitch) return;
+    setState(() {
+      _targetBpm = nextBpm;
+      _mood = nextMood;
+    });
+    await _playMoodTrack(_mood);
+  }
+
+  Future<void> _toggleMusic() async {
+    if (_musicEnabled) {
+      await _player.pause();
+      if (mounted) {
+        setState(() => _musicEnabled = false);
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() => _musicEnabled = true);
+    }
+    if (_running) {
+      await _syncMusicByPace(force: true);
+    } else {
+      await _playMoodTrack(_mood);
+    }
+  }
+
+  Future<void> _selectMood(String mood) async {
+    setState(() => _mood = mood);
+    if (_musicEnabled) {
+      await _playMoodTrack(mood);
     }
   }
 
@@ -315,6 +433,87 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.card.withValues(alpha: 0.94),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: _musicEnabled ? AppColors.accent : AppColors.muted,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    _musicEnabled
+                                        ? '음악 BPM $_targetBpm · $_mood'
+                                        : '음악 일시정지',
+                                    style: const TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  width: 38,
+                                  height: 38,
+                                  child: IconButton(
+                                    onPressed: _isMusicLoading ? null : _toggleMusic,
+                                    icon: Icon(
+                                      _musicEnabled ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              height: 34,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: _moodTrackMap.keys.map((m) {
+                                  final selected = m == _mood;
+                                  return Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                      label: Text(m),
+                                      selected: selected,
+                                      onSelected: (_) => _selectMood(m),
+                                      selectedColor: AppColors.accent.withValues(alpha: 0.2),
+                                      side: BorderSide(
+                                        color: selected
+                                            ? AppColors.accent.withValues(alpha: 0.7)
+                                            : AppColors.border.withValues(alpha: 0.7),
+                                      ),
+                                      labelStyle: TextStyle(
+                                        color: selected ? AppColors.accent : AppColors.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                      ),
+                                      backgroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 20),
                       SizedBox(

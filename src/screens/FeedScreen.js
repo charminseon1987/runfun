@@ -33,6 +33,7 @@ import { hydrateFeedPosts } from '../context/AppDataContext';
 import { useAuth } from '../context/AuthContext';
 import { saveFeedPosts } from '../storage/appStorage';
 import { C, ax } from '../theme/season';
+import { api } from '../api/client';
 
 const MAX_MEDIA_COUNT = 8;
 const MAX_VIDEO_SECONDS = 30;
@@ -122,12 +123,36 @@ export default function FeedScreen() {
 
   useEffect(() => {
     let cancelled = false;
-    hydrateFeedPosts(POSTS_SEED).then((p) => {
-      if (!cancelled) {
-        setPosts(p);
-        setFeedHydrated(true);
+    // 백엔드에서 피드 데이터 로드 시도, 실패 시 로컬 데이터 사용
+    (async () => {
+      try {
+        const data = await api.get('/posts?limit=30');
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((p) => ({
+            id: p.id,
+            user: { name: p.user?.name || '러너', avatar: p.user?.avatar_url || null },
+            content: p.body || '',
+            km: p.distance_km || '-',
+            images: p.media_urls || [],
+            likeCount: p.like_count || 0,
+            liked: false,
+            stamp: null,
+            createdAt: p.created_at || new Date().toISOString(),
+          }));
+          setPosts(mapped);
+          setFeedHydrated(true);
+          return;
+        }
+      } catch {
+        // 백엔드 오프라인 → 로컬 폴백
       }
-    });
+      hydrateFeedPosts(POSTS_SEED).then((p) => {
+        if (!cancelled) {
+          setPosts(p);
+          setFeedHydrated(true);
+        }
+      });
+    })();
     return () => {
       cancelled = true;
     };
@@ -324,12 +349,15 @@ export default function FeedScreen() {
     setEditTargetId(null);
   };
 
-  const toggleLike = (id) =>
+  const toggleLike = (id) => {
     setPosts((p) =>
       p.map((x) =>
         x.id === id ? { ...x, liked: !x.liked, likes: x.liked ? x.likes - 1 : x.likes + 1 } : x
       )
     );
+    // 백그라운드 API 호출 (실패 무시)
+    api.post(`/posts/${id}/like`, {}).catch(() => {});
+  };
   const toggleSave = (id) =>
     setSaved((p) => {
       const n = new Set(p);

@@ -10,15 +10,40 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ActivityIndicator,
 } from 'react-native';
 import { X, Send } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAgent } from '../context/AgentContext';
 import { C, ax } from '../theme/season';
 
+// 에이전트 이름 → 이모지 매핑
+const AGENT_EMOJI = {
+  루카: '🏃',
+  마르코: '🗓️',
+  글로리아: '🌍',
+  테라: '🗺️',
+  비비: '📸',
+  소셜: '👥',
+  스탬피: '🎖️',
+  기어로: '👟',
+  헬리아: '🩺',
+  트래비: '✈️',
+};
+
+function TypingDots() {
+  return (
+    <View style={styles.typingRow}>
+      <View style={[styles.dot, styles.dot1]} />
+      <View style={[styles.dot, styles.dot2]} />
+      <View style={[styles.dot, styles.dot3]} />
+    </View>
+  );
+}
+
 export default function AgentCoachModal() {
   const insets = useSafeAreaInsets();
-  const { open, closeAgent, messages, send, QUICK_ACTIONS, persona } = useAgent();
+  const { open, closeAgent, messages, loading, send, QUICK_ACTIONS, persona } = useAgent();
   const [input, setInput] = React.useState('');
   const scrollRef = useRef(null);
 
@@ -68,7 +93,20 @@ export default function AgentCoachModal() {
                   m.role === 'user' ? styles.bubbleUser : styles.bubbleAgent,
                 ]}
               >
-                <Text style={m.role === 'user' ? styles.textUser : styles.textAgent}>{m.text}</Text>
+                {m.typing ? (
+                  <TypingDots />
+                ) : (
+                  <>
+                    {m.role === 'agent' && m.agentName ? (
+                      <Text style={styles.agentBadge}>
+                        {AGENT_EMOJI[m.agentName] || '🤖'} {m.agentName}
+                      </Text>
+                    ) : null}
+                    <Text style={m.role === 'user' ? styles.textUser : styles.textAgent}>
+                      {m.text}
+                    </Text>
+                  </>
+                )}
               </View>
             ))}
           </ScrollView>
@@ -80,6 +118,7 @@ export default function AgentCoachModal() {
                 style={styles.quickChip}
                 onPress={() => send('', q.id)}
                 activeOpacity={0.85}
+                disabled={loading}
               >
                 <Text style={styles.quickChipTxt}>{q.label}</Text>
               </TouchableOpacity>
@@ -96,9 +135,18 @@ export default function AgentCoachModal() {
               onSubmitEditing={onSend}
               returnKeyType="send"
               multiline
+              editable={!loading}
             />
-            <TouchableOpacity style={styles.sendBtn} onPress={onSend} disabled={!input.trim()}>
-              <Send size={20} color={input.trim() ? C.onAccent : C.textSub} />
+            <TouchableOpacity
+              style={[styles.sendBtn, loading && styles.sendBtnDisabled]}
+              onPress={onSend}
+              disabled={!input.trim() || loading}
+            >
+              {loading ? (
+                <ActivityIndicator size="small" color={C.onAccent} />
+              ) : (
+                <Send size={20} color={input.trim() ? C.onAccent : C.textSub} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -148,8 +196,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.border,
   },
+  agentBadge: {
+    color: C.accent,
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
   textUser: { color: C.onAccent, fontSize: 15, lineHeight: 22 },
   textAgent: { color: C.text, fontSize: 15, lineHeight: 22 },
+  typingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: C.textSub,
+  },
+  dot1: { opacity: 1 },
+  dot2: { opacity: 0.6 },
+  dot3: { opacity: 0.3 },
   quickRow: { paddingHorizontal: 10, paddingVertical: 8, maxHeight: 48 },
   quickChip: {
     backgroundColor: C.surfaceL2,
@@ -189,4 +253,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  sendBtnDisabled: { opacity: 0.6 },
 });

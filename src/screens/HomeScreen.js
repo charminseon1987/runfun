@@ -8,10 +8,13 @@ import {
   Animated,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Location from 'expo-location';
 import { Play, Bell, Flame } from 'lucide-react-native';
 import { C, ax, SEASON, greeting } from '../theme/season';
 import FriendCard from '../components/FriendCard';
 import { useAppData } from '../context/AppDataContext';
+import { haversineKm, formatDistanceKm } from '../utils/geo';
+import { api } from '../api/client';
 
 const UPCOMING = [
   { id: '1', emoji: '🏙️', name: '서울 국제 마라톤', dday: 10, dist: '풀', loc: '광화문' },
@@ -19,27 +22,102 @@ const UPCOMING = [
   { id: '3', emoji: '🌊', name: '제주 국제 마라톤', dday: 46, dist: '풀', loc: '서귀포' },
 ];
 
+/** 대표 좌표(lat, lng) — 내 위치와 거리 계산에 사용 */
 const COURSES = [
-  { id: '1', emoji: '🌙', name: '한강 야경코스', km: '10.5', rating: '4.9', tag: '야간추천', tagC: C.purple },
-  { id: '2', emoji: '⛰️', name: '북한산 둘레길', km: '8.2', rating: '4.8', tag: '트레일', tagC: C.success },
-  { id: '3', emoji: '🌸', name: '전주 한옥마을', km: '6.5', rating: '4.7', tag: '명소코스', tagC: C.orange },
-  { id: '4', emoji: '🌃', name: '올림픽공원', km: '7.1', rating: '4.6', tag: '시티런', tagC: C.accentB },
+  { id: '1', emoji: '🌙', name: '한강 야경코스', region: '서울', km: '10.5', rating: '4.9', tag: '야간추천', tagC: C.purple, lat: 37.528, lng: 127.067 },
+  { id: '2', emoji: '⛰️', name: '북한산 둘레길', region: '서울', km: '8.2', rating: '4.8', tag: '트레일', tagC: C.success, lat: 37.659, lng: 127.011 },
+  { id: '3', emoji: '🌸', name: '전주 한옥마을', region: '전주', km: '6.5', rating: '4.7', tag: '명소코스', tagC: C.orange, lat: 35.815, lng: 127.152 },
+  { id: '4', emoji: '🌃', name: '올림픽공원', region: '서울', km: '7.1', rating: '4.6', tag: '시티런', tagC: C.accentB, lat: 37.52, lng: 127.121 },
 ];
 
 const HOT_COURSES = [
-  { id: 'h1', emoji: '🐶', name: '댕댕이 코스', desc: '반려견 동반 가능 · 평지 위주', km: '4.8', tag: '요즘핫해', tagC: C.accent },
-  { id: 'h2', emoji: '🐋', name: '고래 코스', desc: '해안 라인 · 바다뷰 야외런', km: '7.3', tag: '바다감성', tagC: C.accentB },
-  { id: 'h3', emoji: '🌉', name: '선셋 브릿지 코스', desc: '노을 명소 · 포토스팟 많음', km: '6.2', tag: '인생샷', tagC: C.orange },
-  { id: 'h4', emoji: '🌲', name: '숲길 리커버리 코스', desc: '쿠션감 좋은 트레일', km: '5.4', tag: '회복런', tagC: C.success },
+  { id: 'h1', emoji: '🐶', name: '댕댕이 코스', region: '서울', desc: '반려견 동반 가능 · 평지 위주', km: '4.8', tag: '요즘핫해', tagC: C.accent, lat: 37.526, lng: 127.04 },
+  { id: 'h2', emoji: '🐋', name: '고래 코스', region: '울산', desc: '해안 라인 · 바다뷰 야외런', km: '7.3', tag: '바다감성', tagC: C.accentB, lat: 35.499, lng: 129.412 },
+  { id: 'h3', emoji: '🌉', name: '선셋 브릿지 코스', region: '부산', desc: '노을 명소 · 포토스팟 많음', km: '6.2', tag: '인생샷', tagC: C.orange, lat: 35.153, lng: 129.119 },
+  { id: 'h4', emoji: '🌲', name: '숲길 리커버리 코스', region: '경기', desc: '쿠션감 좋은 트레일', km: '5.4', tag: '회복런', tagC: C.success, lat: 37.411, lng: 127.095 },
 ];
+
+function sortByDistance(items, userLat, userLng) {
+  return [...items]
+    .map((c) => ({
+      ...c,
+      distFromMeKm: haversineKm(userLat, userLng, c.lat, c.lng),
+    }))
+    .sort((a, b) => a.distFromMeKm - b.distFromMeKm);
+}
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { weekStats, streak, weeklyGoalKm } = useAppData();
   const [friendAlerts, setFriendAlerts] = useState(['a1', 'a2']);
   const [cheered, setCheered] = useState({});
+  const [coursesNearMe, setCoursesNearMe] = useState(() => COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+  const [hotNearMe, setHotNearMe] = useState(() => HOT_COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+  const [upcomingMarathons, setUpcomingMarathons] = useState(UPCOMING);
+  const [locHint, setLocHint] = useState('위치 확인 중…');
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // 백엔드에서 마라톤 데이터 로드 (실패 시 시드 데이터 유지)
+  useEffect(() => {
+    api.get('/marathons?status_filter=open&limit=5')
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map((m) => {
+            const raceDate = new Date(m.race_date);
+            const today = new Date();
+            const dday = Math.ceil((raceDate - today) / (1000 * 60 * 60 * 24));
+            const dist = Array.isArray(m.distances) && m.distances.length > 0
+              ? m.distances[0]
+              : '풀';
+            return {
+              id: m.id,
+              emoji: m.is_world_major ? '🌍' : '🏙️',
+              name: m.name,
+              dday,
+              dist: String(dist),
+              loc: m.location || '',
+            };
+          });
+          setUpcomingMarathons(mapped);
+        }
+      })
+      .catch(() => {}); // 실패 시 시드 데이터 유지
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (!cancelled) {
+            setLocHint('위치 권한이 없어 기본 순서로 보여요');
+            setCoursesNearMe(COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+            setHotNearMe(HOT_COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+          }
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        if (cancelled) return;
+        const { latitude, longitude } = pos.coords;
+        setCoursesNearMe(sortByDistance(COURSES, latitude, longitude));
+        setHotNearMe(sortByDistance(HOT_COURSES, latitude, longitude));
+        setLocHint('코스끼리 가까운 게 아니라, 내 위치에서 각 코스까지 직선거리 순이에요');
+      } catch {
+        if (!cancelled) {
+          setLocHint('위치를 불러오지 못해 기본 순서로 보여요');
+          setCoursesNearMe(COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+          setHotNearMe(HOT_COURSES.map((c) => ({ ...c, distFromMeKm: null })));
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -175,7 +253,7 @@ export default function HomeScreen({ navigation }) {
           style={{ marginHorizontal: -16 }}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
         >
-          {UPCOMING.map((m) => (
+          {upcomingMarathons.map((m) => (
             <TouchableOpacity
               key={m.id}
               style={hs.mCard}
@@ -209,20 +287,30 @@ export default function HomeScreen({ navigation }) {
 
       <View style={hs.section}>
         <View style={hs.sectionRow}>
-          <Text style={hs.sectionTitle}>🗺️ 추천 코스</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={hs.sectionTitle}>🗺️ 추천 코스</Text>
+            {locHint ? (
+              <Text style={hs.locHint} numberOfLines={2}>
+                {locHint}
+              </Text>
+            ) : null}
+          </View>
           <TouchableOpacity>
             <Text style={hs.sectionMore}>지도보기</Text>
           </TouchableOpacity>
         </View>
         <View style={hs.courseGrid}>
-          {COURSES.map((c) => (
+          {coursesNearMe.map((c) => (
             <TouchableOpacity key={c.id} style={hs.courseCard}>
               <Text style={{ fontSize: 24 }}>{c.emoji}</Text>
               <View style={{ flex: 1, marginLeft: 10 }}>
                 <Text style={hs.courseName}>{c.name}</Text>
                 <Text style={hs.courseMeta}>
-                  {c.km}km · ⭐ {c.rating}
+                  {c.region} · 코스 {c.km}km · ⭐ {c.rating}
                 </Text>
+                {typeof c.distFromMeKm === 'number' ? (
+                  <Text style={hs.courseMetaDist}>내 위치에서 직선 약 {formatDistanceKm(c.distFromMeKm)}</Text>
+                ) : null}
               </View>
               <View style={[hs.courseTag, { backgroundColor: c.tagC + '22' }]}>
                 <Text style={[hs.courseTagTxt, { color: c.tagC }]}>{c.tag}</Text>
@@ -245,15 +333,21 @@ export default function HomeScreen({ navigation }) {
           style={{ marginHorizontal: -16 }}
           contentContainerStyle={{ paddingHorizontal: 16, gap: 10 }}
         >
-          {HOT_COURSES.map((c) => (
+          {hotNearMe.map((c) => (
             <TouchableOpacity key={c.id} style={hs.hotCard} activeOpacity={0.9}>
               <Text style={{ fontSize: 24 }}>{c.emoji}</Text>
               <Text style={hs.hotName}>{c.name}</Text>
+              <Text style={hs.hotRegion}>{c.region}</Text>
               <Text style={hs.hotDesc} numberOfLines={2}>
                 {c.desc}
               </Text>
               <View style={hs.hotBottom}>
-                <Text style={hs.hotMeta}>{c.km}km</Text>
+                <Text style={hs.hotMeta}>
+                  코스 {c.km}km
+                  {typeof c.distFromMeKm === 'number'
+                    ? ` · 직선 약 ${formatDistanceKm(c.distFromMeKm)}`
+                    : ''}
+                </Text>
                 <View style={[hs.courseTag, { backgroundColor: c.tagC + '22' }]}>
                   <Text style={[hs.courseTagTxt, { color: c.tagC }]}>{c.tag}</Text>
                 </View>
@@ -361,6 +455,7 @@ const hs = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: { color: C.text, fontSize: 15, fontWeight: '700' },
+  locHint: { color: C.textSub, fontSize: 11, marginTop: 4, fontWeight: '600' },
   sectionMore: { color: C.accent, fontSize: 12, fontWeight: '600' },
 
   mCard: {
@@ -389,6 +484,7 @@ const hs = StyleSheet.create({
   },
   courseName: { color: C.text, fontSize: 14, fontWeight: '700' },
   courseMeta: { color: C.textSub, fontSize: 11, marginTop: 2 },
+  courseMetaDist: { color: C.textSub, fontSize: 10, marginTop: 3, fontWeight: '600' },
   courseTag: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
   courseTagTxt: { fontSize: 11, fontWeight: '700' },
   hotCard: {
@@ -400,6 +496,7 @@ const hs = StyleSheet.create({
     padding: 12,
   },
   hotName: { color: C.text, fontSize: 14, fontWeight: '800', marginTop: 8 },
+  hotRegion: { color: C.textSub, fontSize: 10, fontWeight: '700', marginTop: 2 },
   hotDesc: { color: C.textSub, fontSize: 11, marginTop: 4, minHeight: 32 },
   hotBottom: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   hotMeta: { color: C.accent, fontSize: 12, fontWeight: '700' },

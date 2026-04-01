@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel
+
 from app.config import get_settings
 from app.database import get_db
 from app.models.user import User
@@ -44,6 +46,40 @@ async def auth_google(body: GoogleAuthRequest, db: AsyncSession = Depends(get_db
     else:
         user.firebase_uid = firebase_uid
         user.name = name
+
+    token = create_access_token(user.id)
+    return TokenResponse(access_token=token)
+
+
+class GoogleProfileRequest(BaseModel):
+    sub: str
+    email: str
+    name: str
+    picture: str | None = None
+
+
+@router.post("/google-profile", response_model=TokenResponse)
+async def auth_google_profile(body: GoogleProfileRequest, db: AsyncSession = Depends(get_db)):
+    """Expo OAuth 흐름에서 Google userinfo API로 가져온 프로필로 RunMate JWT를 발급합니다.
+    Firebase 미설정 환경(개발/MVP)에서도 동작합니다."""
+    email = body.email.strip().lower()
+    name = (body.name or email.split("@")[0])[:50]
+    firebase_uid = f"google:{body.sub}"
+
+    result = await db.execute(select(User).where(User.firebase_uid == firebase_uid))
+    user = result.scalar_one_or_none()
+    if user is None:
+        result = await db.execute(select(User).where(User.email == email))
+        user = result.scalar_one_or_none()
+    if user is None:
+        user = User(name=name, email=email, firebase_uid=firebase_uid, avatar_url=body.picture)
+        db.add(user)
+        await db.flush()
+    else:
+        user.firebase_uid = firebase_uid
+        user.name = name
+        if body.picture:
+            user.avatar_url = body.picture
 
     token = create_access_token(user.id)
     return TokenResponse(access_token=token)

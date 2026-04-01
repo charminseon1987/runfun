@@ -11,6 +11,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
+import { api, saveApiToken, clearApiToken } from '../api/client';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -78,7 +79,20 @@ function GoogleAuthBridge({ children, cfg, user, setUser, ready }) {
     (async () => {
       try {
         const profile = await fetchGoogleProfile(token);
-        if (!cancelled) await persistUser(profile);
+        if (cancelled) return;
+        // 백엔드 JWT 발급 (Firebase 미설정 환경에서도 동작)
+        try {
+          const { access_token } = await api.post('/auth/google-profile', {
+            sub: profile.sub,
+            email: profile.email,
+            name: profile.name,
+            picture: profile.picture,
+          });
+          if (access_token) await saveApiToken(access_token);
+        } catch {
+          // 백엔드 오프라인 시 무시 — 앱은 로컬 모드로 동작
+        }
+        await persistUser(profile);
       } catch {
         if (!cancelled) Alert.alert('Google', '프로필을 불러오지 못했어요.');
       }
@@ -101,6 +115,7 @@ function GoogleAuthBridge({ children, cfg, user, setUser, ready }) {
   }, [request, promptAsync]);
 
   const signOut = useCallback(async () => {
+    await clearApiToken();
     await persistUser(null);
   }, [persistUser]);
 

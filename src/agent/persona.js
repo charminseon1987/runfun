@@ -23,6 +23,12 @@ export const QUICK_ACTIONS = [
   { id: 'injury', label: '무릎 부담 줄이기' },
   { id: 'spring', label: '벚꽃 러닝 코스' },
   { id: 'hydrate', label: '수분·휴식' },
+  // AI 전문 에이전트 연결 빠른 질문
+  { id: 'marathon', label: '다가오는 마라톤' },
+  { id: 'course', label: '코스 추천' },
+  { id: 'stamp', label: '스탬프 현황' },
+  { id: 'gear', label: '용품 추천' },
+  { id: 'travel', label: '여행 러닝' },
 ];
 
 /**
@@ -48,8 +54,20 @@ export function getCoachReply({ intent = 'free', userText = '', season = SEASON 
   if (intent === 'hydrate' || match(/물|수분|휴식|피로/)) {
     return '러닝 전후 200~300ml 정도 나눠 마시고, 45분 넘게 뛰면 중간에 한 모금씩도 좋아요. 다음 날 가볍게 뛸 땐 전날 수면이 제일 중요해요!';
   }
-  if (match(/마라톤|풀코스|하프|대회/)) {
-    return '대회 4주 전부터는 새로운 신발·페이스 실험은 피하고, 주간 총거리만 천천히 유지해요. D-7은 강도 낮추고 D-2~3은 가볍게 흔들어 주기만 하면 돼요.';
+  if (intent === 'marathon' || match(/마라톤|풀코스|하프|대회/)) {
+    return '대회 4주 전부터는 새로운 신발·페이스 실험은 피하고, 주간 총거리만 천천히 유지해요. D-7은 강도 낮추고 D-2~3은 가볍게 흔들어 주기만 하면 돼요. 마라톤 탭에서 일정을 확인해 보세요 🗓️';
+  }
+  if (intent === 'course' || match(/코스|루트|어디.*뛰/)) {
+    return '한강공원(뚝섬·여의도·반포), 올림픽공원, 북한산 둘레길이 인기 코스예요. 위치 권한을 허용하면 가까운 코스를 더 정확하게 추천해 드릴 수 있어요 🗺️';
+  }
+  if (intent === 'stamp' || match(/스탬프|배지|뱃지|컬렉션/)) {
+    return '스탬프는 특정 코스를 완주하면 자동으로 획득돼요. MY 탭에서 보유 스탬프를 확인하고 도전 중인 코스를 달려보세요 🎖️';
+  }
+  if (intent === 'gear' || match(/신발|러닝화|용품|워치/)) {
+    return '페이스·주간 거리에 맞는 신발이 부상 예방에 가장 중요해요. 스택 높이(중립~맥시멀)와 드롭(0-12mm)을 고려해서 선택하세요. 구체적인 조건을 알려주시면 맞춰 추천해 드릴게요 👟';
+  }
+  if (intent === 'travel' || match(/여행|해외|관광.*러닝/)) {
+    return '여행지에서는 5-10km 정도 가볍게 달리는 코스를 추천해요. 마라톤 도시라면 대회 코스 일부를 체험 러닝하는 것도 특별한 경험이에요 ✈️ 여행지를 알려주시면 맞춤 코스를 안내해 드릴게요!';
   }
   if (match(/안녕|hello|hi|누구/)) {
     return `안녕하세요! 저는 ${COACH_PERSONA.name}예요. ${COACH_PERSONA.tagline}. 아래 빠른 질문을 누르거나, 편하게 문장으로 물어보세요.`;

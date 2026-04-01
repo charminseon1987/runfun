@@ -19,7 +19,9 @@ async def chat(body: ChatBody, user: User = Depends(get_current_user)):
     loc = {}
     if body.lat is not None and body.lng is not None:
         loc = {"lat": body.lat, "lng": body.lng}
-    return await run_agent_chat(str(user.id), body.message, loc)
+    result = await run_agent_chat(str(user.id), body.message, loc)
+    # run_agent_chat이 이미 올바른 형식을 반환하지만 하위 호환성 유지
+    return result
 
 
 @router.get("/recommend/course")

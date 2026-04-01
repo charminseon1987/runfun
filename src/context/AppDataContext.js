@@ -6,6 +6,7 @@ import {
   loadWeeklyGoalKm,
 } from '../storage/appStorage';
 import { aggregateWeek, aggregateYear, computeRunStreak, weekStartMondayMs } from '../utils/stats';
+import { api } from '../api/client';
 
 const AppDataContext = createContext(null);
 
@@ -33,8 +34,20 @@ export function AppDataProvider({ children }) {
     const row = { ...record, id };
     const prev = await loadRuns();
     const next = [row, ...prev].sort((a, b) => b.endedAt - a.endedAt);
+    // 로컬 우선 저장
     await saveRuns(next);
     setRuns(next);
+    // 백그라운드 백엔드 동기화 (실패해도 UX 차단 안 함)
+    if (record._sessionId) {
+      api.post(`/running/end/${record._sessionId}`, {
+        ended_at: new Date(record.endedAt).toISOString(),
+        distance_km: record.distanceKm,
+        duration_sec: record.durationSec,
+        avg_pace: record.paceNum || null,
+        calories: record.kcal || null,
+        route: (record.routeSample || []).map((p) => ({ lat: p.latitude, lng: p.longitude })),
+      }).catch(() => {});
+    }
   }, []);
 
   const weekStats = useMemo(() => aggregateWeek(runs, weekStartMondayMs()), [runs]);
