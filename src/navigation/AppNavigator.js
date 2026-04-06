@@ -6,7 +6,9 @@ import RunScreen from '../screens/RunScreen';
 import MarathonScreen from '../screens/MarathonScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MyScreen from '../screens/MyScreen';
+import FridgeScreen from '../screens/FridgeScreen';
 import { C } from '../theme/season';
+import { Utensils } from 'lucide-react-native';
 
 const Tab = createBottomTabNavigator();
 
@@ -51,6 +53,11 @@ export default function AppNavigator() {
         name="MY"
         component={MyScreen}
         options={{ tabBarIcon: ({ color }) => <User color={color} size={24} /> }}
+      />
+      <Tab.Screen
+        name="냉장고"
+        component={FridgeScreen}
+        options={{ tabBarIcon: ({ color }) => <Utensils color={color} size={24} /> }}
       />
     </Tab.Navigator>
   );

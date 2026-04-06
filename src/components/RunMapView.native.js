@@ -1,9 +1,9 @@
 import React, { forwardRef } from 'react';
 import { Platform, StyleSheet } from 'react-native';
-import MapView, { Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { C } from '../theme/season';
 
-function RunMapView({ mapRegion, routeCoords }, ref) {
+function RunMapView({ mapRegion, routeCoords, friendRouteCoords = [], friendCurrentPoint = null, showFriendLayer = false }, ref) {
   return (
     <MapView
       ref={ref}
@@ -28,6 +28,18 @@ function RunMapView({ mapRegion, routeCoords }, ref) {
           lineCap="round"
           lineJoin="round"
         />
+      )}
+      {showFriendLayer && friendRouteCoords.length >= 2 && (
+        <Polyline
+          coordinates={friendRouteCoords}
+          strokeColor={C.accentB}
+          strokeWidth={4}
+          lineCap="round"
+          lineJoin="round"
+        />
+      )}
+      {showFriendLayer && friendCurrentPoint && (
+        <Marker coordinate={friendCurrentPoint} title="같이 달리는 친구" />
       )}
     </MapView>
   );

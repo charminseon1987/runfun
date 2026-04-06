@@ -12,7 +12,15 @@ export default function FriendCard({
   onDismiss,
   onJoin,
   onCheer,
+  joinState = 'idle',
 }) {
+  const joinLabel = joinState === 'sending'
+    ? '요청 중...'
+    : joinState === 'sent'
+      ? '초대 보냄'
+      : joinState === 'accepted'
+        ? '합류 완료'
+        : '같이 달려';
   return (
     <View style={s.friendCard}>
       <View style={s.friendAvatar}>
@@ -32,8 +40,12 @@ export default function FriendCard({
         <Text style={s.friendTime}>{minAgo === 0 ? '방금 시작' : `${minAgo}분 전 시작`}</Text>
       </View>
       <View style={{ gap: 6 }}>
-        <TouchableOpacity style={s.joinBtn} onPress={onJoin}>
-          <Text style={s.joinBtnTxt}>같이 달려</Text>
+        <TouchableOpacity
+          style={[s.joinBtn, joinState !== 'idle' && s.joinBtnDisabled]}
+          onPress={onJoin}
+          disabled={joinState !== 'idle'}
+        >
+          <Text style={s.joinBtnTxt}>{joinLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.cheerBtn} onPress={onCheer}>
           <Text style={s.cheerBtnTxt}>
@@ -92,6 +104,7 @@ const s = StyleSheet.create({
   },
   runningBadgeTxt: { color: C.success, fontSize: 10, fontWeight: '700' },
   joinBtn: { backgroundColor: C.accent, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  joinBtnDisabled: { opacity: 0.7 },
   joinBtnTxt: { color: C.onAccent, fontSize: 12, fontWeight: '800' },
   cheerBtn: {
     borderRadius: 8,

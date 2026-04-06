@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 
 def _rule_intent(text: str) -> str:
     t = text.lower()
+    if any(k in t for k in ["컨디션", "컨디션관리", "테이퍼", "피킹", "레이스 컨디션"]):
+        return "marathon_condition"
+    if any(k in t for k in ["신청한 마라톤", "내 마라톤", "내 대회 일정", "신청 대회"]):
+        return "marathon_condition"
     if any(k in t for k in ["무릎", "발목", "부상", "통증", "아프", "피로골절", "힘줄", "근육통"]):
         return "health"
     if any(k in t for k in ["마라톤", "marathon", "대회", "풀코스", "하프"]):
@@ -29,6 +33,8 @@ def _rule_intent(text: str) -> str:
         return "stamp"
     if any(k in t for k in ["친구", "friend", "러닝 중", "같이"]):
         return "friend_alert"
+    if any(k in t for k in ["냉장고", "fridge", "레시피", "식단", "식사", "요리"]):
+        return "fridge_scan"
     if any(k in t for k in ["용품", "gear", "신발", "러닝화", "워치"]):
         return "gear_advice"
     if any(k in t for k in ["여행", "travel", "관광", "해외 러닝"]):
@@ -52,7 +58,7 @@ async def _claude_intent(text: str) -> str:
             "Classify user intent into exactly one label:\n"
             "marathon_schedule, world_marathon, course_discovery, gps_record, "
             "media_publish, friend_alert, stamp, gear_advice, community, "
-            "travel_running, health\n\n"
+            "travel_running, health, marathon_condition, fridge_scan\n\n"
             f"User: {text}\nLabel:"
         )
         msg = await client.messages.create(
@@ -64,7 +70,7 @@ async def _claude_intent(text: str) -> str:
         raw = getattr(block, "text", "") or ""
         m = re.search(
             r"(marathon_schedule|world_marathon|course_discovery|gps_record|media_publish|"
-            r"friend_alert|stamp|gear_advice|community|travel_running|health)",
+            r"friend_alert|stamp|gear_advice|community|travel_running|health|marathon_condition|fridge_scan)",
             raw,
             re.I,
         )
@@ -83,12 +89,13 @@ async def _load_user_context(user_id: str) -> dict[str, Any]:
         "run_history": [],
         "stamp_ids": [],
         "marathon_context": [],
+        "applied_marathons": [],
     }
     try:
         from app.database import AsyncSessionLocal
         from app.models.running_session import RunningSession
         from app.models.stamp import UserStamp
-        from app.models.marathon import Marathon
+        from app.models.marathon import Marathon, MarathonAlert
         import uuid
 
         uid = uuid.UUID(user_id)
@@ -139,6 +146,25 @@ async def _load_user_context(user_id: str) -> dict[str, Any]:
                 }
                 for m in marathons
             ]
+
+            # 사용자가 신청(알림 등록)한 마라톤
+            applied_result = await db.execute(
+                select(MarathonAlert, Marathon)
+                .join(Marathon, Marathon.id == MarathonAlert.marathon_id)
+                .where(MarathonAlert.user_id == uid, Marathon.race_date >= today)
+                .order_by(Marathon.race_date)
+                .limit(5)
+            )
+            context["applied_marathons"] = [
+                {
+                    "marathon_id": str(m.id),
+                    "name": m.name,
+                    "race_date": m.race_date.isoformat() if m.race_date else "",
+                    "location": m.location or "",
+                    "alert_before_days": a.alert_before_days,
+                }
+                for a, m in applied_result.all()
+            ]
     except Exception as e:
         logger.warning("_load_user_context failed: %s", e)
     return context
@@ -178,6 +204,8 @@ def build_graph():
     from app.agents.gero_agent import gero_node
     from app.agents.helia_agent import helia_node
     from app.agents.travi_agent import travi_node
+    from app.agents.condi_agent import condi_node
+    from app.agents.chefmyfridge_workflow import chefmyfridge_workflow_node
 
     workflow = StateGraph(RunMateState)
     workflow.add_node("orchestrator", orchestrator_node)
@@ -194,6 +222,8 @@ def build_graph():
         "community": "chat_agent",
         "travel_running": "travel_agent",
         "health": "health_agent",
+        "marathon_condition": "condition_agent",
+        "fridge_scan": "chefmyfridge_agent",
     }
 
     node_funcs = {
@@ -208,6 +238,8 @@ def build_graph():
         "chat_agent": soci_node,
         "travel_agent": travi_node,
         "health_agent": helia_node,
+        "condition_agent": condi_node,
+        "chefmyfridge_agent": chefmyfridge_workflow_node,
     }
 
     for node_name, fn in node_funcs.items():

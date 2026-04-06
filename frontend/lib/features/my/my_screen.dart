@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:go_router/go_router.dart';
+
 import '../../core/constants/app_colors.dart';
+import '../../core/providers/auth_provider.dart';
 import '../../core/services/api_service.dart';
 
 class MyScreen extends ConsumerWidget {
@@ -658,11 +661,9 @@ class _MenuSection extends StatelessWidget {
             icon: Icons.logout,
             color: AppColors.danger,
             title: '로그아웃',
-            onTap: () {
-              ref.read(apiTokenProvider.notifier).state = null;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('로그아웃되었습니다')),
-              );
+            onTap: () async {
+              await ref.read(authProvider.notifier).signOut();
+              if (context.mounted) context.go('/login');
             },
           ),
         ]),

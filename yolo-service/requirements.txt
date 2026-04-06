@@ -1,0 +1,7 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.0
+httpx==0.27.0
+
+# ultralytics는 모델/가중치가 준비된 환경에서만 설치하세요.
+# 설치하지 않아도 폴백 응답은 동작하도록 방어 코드를 포함했습니다.
+ultralytics>=8.0.0

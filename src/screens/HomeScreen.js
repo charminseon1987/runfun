@@ -6,6 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Animated,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
@@ -49,7 +50,10 @@ function sortByDistance(items, userLat, userLng) {
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { weekStats, streak, weeklyGoalKm } = useAppData();
-  const [friendAlerts, setFriendAlerts] = useState(['a1', 'a2']);
+  const [friendsRunning, setFriendsRunning] = useState([]);
+  const [dismissedFriendIds, setDismissedFriendIds] = useState([]);
+  const [pendingInvites, setPendingInvites] = useState([]);
+  const [joinStateByFriendId, setJoinStateByFriendId] = useState({});
   const [cheered, setCheered] = useState({});
   const [coursesNearMe, setCoursesNearMe] = useState(() => COURSES.map((c) => ({ ...c, distFromMeKm: null })));
   const [hotNearMe, setHotNearMe] = useState(() => HOT_COURSES.map((c) => ({ ...c, distFromMeKm: null })));
@@ -83,6 +87,29 @@ export default function HomeScreen({ navigation }) {
         }
       })
       .catch(() => {}); // 실패 시 시드 데이터 유지
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [runningNow, invites] = await Promise.all([
+          api.get('/friends/running-now'),
+          api.get('/friends/join-invites/pending'),
+        ]);
+        if (cancelled) return;
+        setFriendsRunning(Array.isArray(runningNow) ? runningNow : []);
+        setPendingInvites(Array.isArray(invites) ? invites : []);
+      } catch {
+        if (!cancelled) {
+          setFriendsRunning([]);
+          setPendingInvites([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -130,6 +157,53 @@ export default function HomeScreen({ navigation }) {
   const weeklyKm = weekStats.totalKm;
   const weeklyGoal = weeklyGoalKm;
   const progress = weeklyGoal > 0 ? weeklyKm / weeklyGoal : 0;
+  const visibleFriends = friendsRunning.filter((f) => !dismissedFriendIds.includes(f.user_id));
+
+  const handleJoin = async (friend) => {
+    const friendId = friend.user_id;
+    if (!friendId || !friend.session_id) return;
+    setJoinStateByFriendId((p) => ({ ...p, [friendId]: 'sending' }));
+    try {
+      await api.post('/friends/join-invites', {
+        friend_id: friendId,
+        runner_session_id: friend.session_id,
+      });
+      setJoinStateByFriendId((p) => ({ ...p, [friendId]: 'sent' }));
+      Alert.alert('같이달려', `${friend.name}님에게 합류 요청을 보냈어요.`);
+    } catch (e) {
+      setJoinStateByFriendId((p) => ({ ...p, [friendId]: 'idle' }));
+      Alert.alert('요청 실패', e?.message || '합류 요청을 보내지 못했어요.');
+    }
+  };
+
+  const handleAcceptInvite = async (invite) => {
+    const hostSessionId = invite?.runner_session_id ? String(invite.runner_session_id) : '';
+    const hostName = invite?.inviter_name ? String(invite.inviter_name) : '친구';
+    if (!hostSessionId) {
+      Alert.alert('수락 실패', '초대 정보가 올바르지 않아요. 다시 시도해 주세요.');
+      return;
+    }
+    try {
+      await api.post(`/friends/join-invites/${invite.id}/accept`);
+      setPendingInvites((p) => p.filter((x) => x.id !== invite.id));
+      navigation.navigate('러닝', {
+        joinMode: true,
+        joinInviteId: invite.id,
+        hostSessionId,
+        hostName,
+      });
+    } catch (e) {
+      Alert.alert('수락 실패', e?.message || '초대를 수락하지 못했어요.');
+    }
+  };
+
+  const handleCheer = async (friend) => {
+    if (!friend?.user_id) return;
+    setCheered((p) => ({ ...p, [friend.user_id]: true }));
+    try {
+      await api.post(`/friends/${friend.user_id}/cheer`);
+    } catch {}
+  };
 
   return (
     <ScrollView
@@ -202,7 +276,26 @@ export default function HomeScreen({ navigation }) {
         <Text style={hs.startBtnTxt}>달리기 시작</Text>
       </TouchableOpacity>
 
-      {friendAlerts.length > 0 && (
+      {pendingInvites.length > 0 && (
+        <View style={hs.section}>
+          <View style={hs.sectionRow}>
+            <Text style={hs.sectionTitle}>초대받은 같이달려</Text>
+          </View>
+          {pendingInvites.map((invite) => (
+            <View key={invite.id} style={hs.inviteCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={hs.inviteTitle}>{invite.inviter_name || '친구'}님이 함께 달리기를 초대했어요</Text>
+                <Text style={hs.inviteSub}>지금 수락하고 함께 달릴 수 있어요.</Text>
+              </View>
+              <TouchableOpacity style={hs.inviteAcceptBtn} onPress={() => handleAcceptInvite(invite)}>
+                <Text style={hs.inviteAcceptTxt}>수락</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {visibleFriends.length > 0 && (
         <View style={hs.section}>
           <View style={hs.sectionRow}>
             <Text style={hs.sectionTitle}>👥 지금 달리는 친구</Text>
@@ -211,32 +304,21 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          {friendAlerts.includes('a1') && (
+          {visibleFriends.map((friend) => (
             <FriendCard
-              emoji="🧑"
-              name="민준"
-              course="한강공원 뚝섬"
-              km={2.4}
+              key={`${friend.user_id}-${friend.session_id}`}
+              emoji="🏃"
+              name={friend.name || '친구'}
+              course="실시간 러닝"
+              km={Number(friend.distance_km || 0)}
               minAgo={0}
-              cheered={!!cheered.a1}
-              onDismiss={() => setFriendAlerts((p) => p.filter((x) => x !== 'a1'))}
-              onJoin={() => {}}
-              onCheer={() => setCheered((p) => ({ ...p, a1: true }))}
+              cheered={!!cheered[friend.user_id]}
+              joinState={joinStateByFriendId[friend.user_id] || 'idle'}
+              onDismiss={() => setDismissedFriendIds((p) => [...p, friend.user_id])}
+              onJoin={() => handleJoin(friend)}
+              onCheer={() => handleCheer(friend)}
             />
-          )}
-          {friendAlerts.includes('a2') && (
-            <FriendCard
-              emoji="👩"
-              name="수진"
-              course="북한산 둘레길"
-              km={5.1}
-              minAgo={3}
-              cheered={!!cheered.a2}
-              onDismiss={() => setFriendAlerts((p) => p.filter((x) => x !== 'a2'))}
-              onJoin={() => {}}
-              onCheer={() => setCheered((p) => ({ ...p, a2: true }))}
-            />
-          )}
+          ))}
         </View>
       )}
 
@@ -500,4 +582,26 @@ const hs = StyleSheet.create({
   hotDesc: { color: C.textSub, fontSize: 11, marginTop: 4, minHeight: 32 },
   hotBottom: { marginTop: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   hotMeta: { color: C.accent, fontSize: 12, fontWeight: '700' },
+  inviteCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.border,
+    padding: 12,
+    marginBottom: 8,
+  },
+  inviteTitle: { color: C.text, fontSize: 13, fontWeight: '700' },
+  inviteSub: { color: C.textSub, fontSize: 11, marginTop: 3 },
+  inviteAcceptBtn: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: C.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  inviteAcceptTxt: { color: C.onAccent, fontSize: 12, fontWeight: '800' },
 });

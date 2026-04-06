@@ -2,6 +2,7 @@ import { motion } from 'motion/react'
 import { Navbar } from './components/Navbar'
 import { Hero } from './components/Hero'
 import { ScrollSection } from './components/ScrollSection'
+import { FridgeScanner } from './components/FridgeScanner'
 
 /** 데모용 MP4 (VITE_VIDEO_SRC 미설정 시). 비활성화하려면 .env에 VITE_VIDEO_SRC 를 공백 한 칸 등으로 두고 Hero에서 trim 처리 — 현재는 미설정이면 데모 재생 */
 const DEMO_MP4 =
@@ -24,6 +25,10 @@ function App() {
             <li>코스 완주 스탬프·전국·세계 마라톤 일정 DB와 신청 알림.</li>
             <li>FFmpeg.wasm 기반 러닝 코스 영상 속도 편집, GPS 기록에서 SNS 업로드까지 한 흐름.</li>
           </ul>
+        </ScrollSection>
+
+        <ScrollSection id="냉장고레시피" title="냉장고 레시피">
+          <FridgeScanner />
         </ScrollSection>
 
         <ScrollSection id="에이전트" title="멀티 에이전트">

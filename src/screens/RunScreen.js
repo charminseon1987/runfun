@@ -22,6 +22,7 @@ import { downsampleCoords, pathDistanceKm } from '../utils/geo';
 import { formatPace } from '../utils/stats';
 import { C, ax } from '../theme/season';
 import { api } from '../api/client';
+import { closeRunningSocket, createRunningSocket, sendRunningSocket } from '../realtime/runningSocket';
 
 const DEFAULT_REGION = {
   latitude: 37.5665,
@@ -32,7 +33,10 @@ const DEFAULT_REGION = {
 
 const IS_WEB = Platform.OS === 'web';
 
-export default function RunScreen() {
+export default function RunScreen({ route }) {
+  const joinMode = !!route?.params?.joinMode;
+  const hostName = route?.params?.hostName || '친구';
+  const hostSessionId = route?.params?.hostSessionId || null;
   useEffect(() => {
     if (IS_WEB) return;
     if (Platform.OS === 'android' && Constants.appOwnership === 'expo') {
@@ -49,6 +53,9 @@ export default function RunScreen() {
   const [showFinishModal, setShowFinishModal] = useState(false);
   const [mapRegion, setMapRegion] = useState(DEFAULT_REGION);
   const [routeCoords, setRouteCoords] = useState([]);
+  const [friendRouteCoords, setFriendRouteCoords] = useState([]);
+  const [friendCurrentPoint, setFriendCurrentPoint] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
 
   const intervalRef = useRef(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -60,12 +67,37 @@ export default function RunScreen() {
   const runStartedAtRef = useRef(null);
   const sessionIdRef = useRef(null); // 백엔드 RunningSession ID
   const elapsedRef = useRef(0);
+  const publishWsRef = useRef(null);
+  const subscribeWsRef = useRef(null);
 
   const { addRun } = useAppData();
   const { updateLocation } = useAgent();
   useEffect(() => {
     elapsedRef.current = elapsed;
   }, [elapsed]);
+
+  useEffect(() => {
+    return () => {
+      closeRunningSocket(publishWsRef.current);
+      closeRunningSocket(subscribeWsRef.current);
+      publishWsRef.current = null;
+      subscribeWsRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (IS_WEB || !sessionId) return;
+    if (phase === 'running') {
+      if (!publishWsRef.current) {
+        createRunningSocket(sessionId).then((ws) => {
+          publishWsRef.current = ws;
+        });
+      }
+      return;
+    }
+    closeRunningSocket(publishWsRef.current);
+    publishWsRef.current = null;
+  }, [phase, sessionId]);
 
   useEffect(() => {
     if (phase === 'running') {
@@ -173,6 +205,13 @@ export default function RunScreen() {
             const kmNow = pathDistanceKm(next);
             kmRef.current = kmNow;
             setKm(kmNow);
+            sendRunningSocket(publishWsRef.current, {
+              latitude: pt.latitude,
+              longitude: pt.longitude,
+              distance_km: kmNow,
+              duration_sec: elapsedRef.current,
+              at: Date.now(),
+            });
             return next;
           });
           mapRef.current?.animateToRegion(
@@ -197,6 +236,50 @@ export default function RunScreen() {
       watchRef.current = null;
     };
   }, [phase]);
+
+  useEffect(() => {
+    if (IS_WEB || !joinMode || !hostSessionId) {
+      closeRunningSocket(subscribeWsRef.current);
+      subscribeWsRef.current = null;
+      setFriendCurrentPoint(null);
+      setFriendRouteCoords([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const ws = await createRunningSocket(hostSessionId, {
+        onMessage: (msg) => {
+          if (!msg || typeof msg !== 'object') return;
+          const lat = Number(msg.latitude);
+          const lng = Number(msg.longitude);
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+          const pt = { latitude: lat, longitude: lng };
+          setFriendCurrentPoint(pt);
+          setFriendRouteCoords((prev) => {
+            const last = prev[prev.length - 1];
+            if (
+              last &&
+              Math.abs(last.latitude - pt.latitude) < 0.00001 &&
+              Math.abs(last.longitude - pt.longitude) < 0.00001
+            ) {
+              return prev;
+            }
+            return [...prev, pt];
+          });
+        },
+      });
+      if (cancelled) {
+        closeRunningSocket(ws);
+        return;
+      }
+      subscribeWsRef.current = ws;
+    })();
+    return () => {
+      cancelled = true;
+      closeRunningSocket(subscribeWsRef.current);
+      subscribeWsRef.current = null;
+    };
+  }, [joinMode, hostSessionId]);
 
   const fmt = (s) =>
     `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -241,8 +324,13 @@ export default function RunScreen() {
     elapsedAtPauseRef.current = 0;
     runStartedAtRef.current = null;
     sessionIdRef.current = null;
+    setSessionId(null);
     setShowFinishModal(false);
     setRouteCoords([]);
+    setFriendRouteCoords([]);
+    setFriendCurrentPoint(null);
+    closeRunningSocket(publishWsRef.current);
+    publishWsRef.current = null;
   };
 
   const resetRun = () => {
@@ -253,8 +341,14 @@ export default function RunScreen() {
     kmRef.current = 0;
     elapsedAtPauseRef.current = 0;
     runStartedAtRef.current = null;
+    sessionIdRef.current = null;
+    setSessionId(null);
     setShowFinishModal(false);
     setRouteCoords([]);
+    setFriendRouteCoords([]);
+    setFriendCurrentPoint(null);
+    closeRunningSocket(publishWsRef.current);
+    publishWsRef.current = null;
   };
 
   const onFinishWithShare = async () => {
@@ -271,13 +365,25 @@ export default function RunScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <View style={StyleSheet.absoluteFillObject} collapsable={false}>
-        <RunMapView ref={mapRef} mapRegion={mapRegion} routeCoords={routeCoords} />
+        <RunMapView
+          ref={mapRef}
+          mapRegion={mapRegion}
+          routeCoords={routeCoords}
+          friendRouteCoords={friendRouteCoords}
+          friendCurrentPoint={friendCurrentPoint}
+          showFriendLayer={joinMode}
+        />
       </View>
 
       <View style={rs.topChip}>
         <Clock size={13} color={C.accent} />
         <Text style={rs.topChipTxt}>{fmt(elapsed)}</Text>
       </View>
+      {joinMode && (
+        <View style={rs.joinChip}>
+          <Text style={rs.joinChipTxt}>{hostName}님과 함께 달리는 중</Text>
+        </View>
+      )}
 
       {phase === 'running' && (
         <Animated.View style={[rs.pulseRing, { transform: [{ scale: pulseAnim }] }]} />
@@ -330,8 +436,10 @@ export default function RunScreen() {
                   started_at: new Date(startedAt).toISOString(),
                 });
                 sessionIdRef.current = res.id;
+                setSessionId(res.id);
               } catch {
                 sessionIdRef.current = null;
+                setSessionId(null);
               }
             }}
           >
@@ -420,6 +528,18 @@ const rs = StyleSheet.create({
     borderColor: C.border,
   },
   topChipTxt: { color: C.text, fontSize: 14, fontWeight: '700' },
+  joinChip: {
+    position: 'absolute',
+    top: 92,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(125,211,168,0.2)',
+    borderColor: C.accent,
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  joinChipTxt: { color: C.accentDeep, fontSize: 12, fontWeight: '700' },
   pulseRing: {
     position: 'absolute',
     alignSelf: 'center',

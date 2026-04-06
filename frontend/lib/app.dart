@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/constants/app_colors.dart';
+import 'core/providers/auth_provider.dart';
+import 'features/auth/login_screen.dart';
 import 'features/community/community_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/marathon/marathon_list_screen.dart';
@@ -153,15 +156,34 @@ ThemeData _runMateTheme() {
   );
 }
 
-class RunMateApp extends StatelessWidget {
+class RunMateApp extends ConsumerWidget {
   const RunMateApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+
     final router = GoRouter(
       navigatorKey: _rootKey,
       initialLocation: '/home',
+      redirect: (context, state) {
+        final status = authState.status;
+        final isLoginRoute = state.matchedLocation == '/login';
+
+        if (status == AuthStatus.loading) return null;
+        if (status == AuthStatus.unauthenticated && !isLoginRoute) {
+          return '/login';
+        }
+        if (status == AuthStatus.authenticated && isLoginRoute) {
+          return '/home';
+        }
+        return null;
+      },
       routes: [
+        GoRoute(
+          path: '/login',
+          builder: (_, __) => const LoginScreen(),
+        ),
         GoRoute(
           path: '/home',
           builder: (_, __) => const _TabShell(child: HomeScreen()),

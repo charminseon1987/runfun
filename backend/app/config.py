@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     allowed_origins: str = (
         "http://localhost:8080,http://127.0.0.1:8080,"
         "http://localhost:3000,http://127.0.0.1:3000,"
+        "http://localhost:5173,http://127.0.0.1:5173,"
         "http://localhost:5555,http://127.0.0.1:5555"
     )
 
@@ -25,6 +26,11 @@ class Settings(BaseSettings):
     firebase_credentials_path: str = ""
 
     access_token_expire_minutes: int = 60 * 24 * 7
+
+    # Supabase Storage (냉장고 이미지 업로드 — 비어 있으면 data URL 폴백)
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
+    fridge_storage_bucket: str = "fridge-images"
 
 
 @lru_cache

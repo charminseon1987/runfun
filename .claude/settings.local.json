@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(curl -s \"http://localhost:8081/app.js.bundle?platform=web&dev=true\")",
-      "WebFetch(domain:claude.ai)"
+      "WebFetch(domain:claude.ai)",
+      "Bash(powershell.exe -Command \"& 'C:\\\\Users\\\\hyese\\\\.puro\\\\envs\\\\stable\\\\flutter\\\\bin\\\\flutter.bat' devices 2>&1\")"
     ]
   }
 }
