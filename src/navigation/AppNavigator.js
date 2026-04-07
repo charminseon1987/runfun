@@ -1,18 +1,20 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Home, Play, Calendar, User, Users } from 'lucide-react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Home, Play, Calendar, User, Users, Utensils } from 'lucide-react-native';
 import HomeScreen from '../screens/HomeScreen';
 import RunScreen from '../screens/RunScreen';
 import MarathonScreen from '../screens/MarathonScreen';
 import FeedScreen from '../screens/FeedScreen';
 import MyScreen from '../screens/MyScreen';
 import FridgeScreen from '../screens/FridgeScreen';
+import DrawingCourseScreen from '../screens/DrawingCourseScreen';
 import { C } from '../theme/season';
-import { Utensils } from 'lucide-react-native';
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+function HomeTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -60,5 +62,14 @@ export default function AppNavigator() {
         options={{ tabBarIcon: ({ color }) => <Utensils color={color} size={24} /> }}
       />
     </Tab.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="HomeTabs" component={HomeTabs} />
+      <Stack.Screen name="DrawingCourse" component={DrawingCourseScreen} />
+    </Stack.Navigator>
   );
 }

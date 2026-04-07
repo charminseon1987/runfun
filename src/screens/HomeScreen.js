@@ -276,6 +276,15 @@ export default function HomeScreen({ navigation }) {
         <Text style={hs.startBtnTxt}>달리기 시작</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={[hs.startBtn, { backgroundColor: '#1E1E2E', borderWidth: 1, borderColor: 'rgba(0,232,122,0.3)', marginTop: -8 }]}
+        onPress={() => navigation.navigate('DrawingCourse')}
+        activeOpacity={0.85}
+      >
+        <Text style={{ fontSize: 22, marginRight: 10 }}>🎨</Text>
+        <Text style={[hs.startBtnTxt, { color: '#00E87A' }]}>GPS 드로잉 시작</Text>
+      </TouchableOpacity>
+
       {pendingInvites.length > 0 && (
         <View style={hs.section}>
           <View style={hs.sectionRow}>

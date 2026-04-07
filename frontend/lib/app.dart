@@ -11,6 +11,7 @@ import 'features/marathon/marathon_list_screen.dart';
 import 'features/my/my_screen.dart';
 import 'features/running/running_active_screen.dart';
 import 'features/stamps/stamp_book_screen.dart';
+import 'features/courses/drawing_course_screen.dart';
 
 final _rootKey = GlobalKey<NavigatorState>();
 
@@ -207,6 +208,10 @@ class RunMateApp extends ConsumerWidget {
         GoRoute(
           path: '/run/active',
           builder: (_, __) => const RunningActiveScreen(),
+        ),
+        GoRoute(
+          path: '/drawing',
+          builder: (_, __) => const DrawingCourseScreen(),
         ),
       ],
     );

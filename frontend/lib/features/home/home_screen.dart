@@ -259,6 +259,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             child: _StartRunButton(onTap: () => context.push('/run/active')),
           ),
 
+          const SizedBox(height: 12),
+
+          // ── GPS 드로잉 코스 버튼 ───────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: _DrawingRunButton(onTap: () => context.push('/drawing')),
+          ),
+
           const SizedBox(height: 16),
 
           // ── 친구 러닝 알림 ─────────────────────────────────────
@@ -616,6 +624,48 @@ class _StartRunButton extends StatelessWidget {
                 '달리기 시작',
                 style: TextStyle(
                   color: Colors.white,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── 드로잉 코스 시작 버튼 ──────────────────────────────────────────────────────
+class _DrawingRunButton extends StatelessWidget {
+  const _DrawingRunButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E2E), // 코시 다크 컨테이너 컬러
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFF00E87A).withValues(alpha: 0.3)),
+          ),
+          child: const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('🎨', style: TextStyle(fontSize: 22)),
+              SizedBox(width: 10),
+              Text(
+                'GPS 드로잉 시작',
+                style: TextStyle(
+                  color: Color(0xFF00E87A),
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.2,
