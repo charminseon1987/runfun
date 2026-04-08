@@ -281,6 +281,14 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
     final hasMap = key.isNotEmpty;
     final target = _route.isNotEmpty ? _route.last : _fallbackTarget;
 
+    List<LatLng> targetRoute = [];
+    try {
+      final extra = GoRouterState.of(context).extra as Map<String, dynamic>?;
+      if (extra != null && extra['targetRoute'] != null) {
+        targetRoute = List<LatLng>.from(extra['targetRoute']);
+      }
+    } catch (_) {}
+
     final mapLayer = hasMap
         ? GoogleMap(
             initialCameraPosition: CameraPosition(target: target, zoom: 15.5),
@@ -288,18 +296,27 @@ class _RunningActiveScreenState extends ConsumerState<RunningActiveScreen> {
               _mapController = c;
               if (_route.isNotEmpty) {
                 _followCamera(_route.last);
+              } else if (targetRoute.isNotEmpty) {
+                _followCamera(targetRoute.first);
               }
             },
-            polylines: _route.length >= 2
-                ? {
-                    Polyline(
-                      polylineId: const PolylineId('run'),
-                      color: AppColors.accent,
-                      width: 5,
-                      points: _route,
-                    ),
-                  }
-                : {},
+            polylines: {
+              if (targetRoute.isNotEmpty)
+                Polyline(
+                  polylineId: const PolylineId('target'),
+                  color: AppColors.accent.withValues(alpha: 0.3),
+                  width: 6,
+                  points: targetRoute,
+                  patterns: const [PatternItem.dash(20), PatternItem.gap(10)],
+                ),
+              if (_route.length >= 2)
+                Polyline(
+                  polylineId: const PolylineId('run'),
+                  color: AppColors.accent,
+                  width: 5,
+                  points: _route,
+                ),
+            },
             myLocationEnabled: true,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
